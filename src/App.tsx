@@ -11,6 +11,8 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showAssistant, setShowAssistant] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
@@ -22,7 +24,36 @@ export default function App() {
     } else {
       setLoading(false);
     }
+
+    // PWA Install Prompt handling
+    const handleBeforeInstall = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      // Only show if user hasn't seen it recently (optional)
+      const hasDismissed = localStorage.getItem('pwa_dismissed');
+      if (!hasDismissed) {
+        setShowInstallBanner(true);
+      }
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
   }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setShowInstallBanner(false);
+    }
+    setDeferredPrompt(null);
+  };
+
+  const dismissInstall = () => {
+    setShowInstallBanner(false);
+    localStorage.setItem('pwa_dismissed', 'true');
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
@@ -76,6 +107,26 @@ export default function App() {
       </AnimatePresence>
 
       <AnimatePresence>
+        {showInstallBanner && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-24 md:bottom-8 left-4 right-4 md:left-auto md:right-8 md:w-96 z-[100] bg-yellow-400 border-4 border-black hand-drawn shadow-sketch p-6 flex items-center justify-between gap-4"
+          >
+            <div className="flex-1">
+              <p className="font-accent text-lg font-bold leading-tight">Download the Notebook for a better experience 🖋️</p>
+              <button 
+                onClick={handleInstallClick}
+                className="mt-3 bg-black text-white px-6 py-2 font-bold text-sm hand-drawn hover:scale-105 transition-transform"
+              >
+                Inscribe App
+              </button>
+            </div>
+            <button onClick={dismissInstall} className="font-accent text-xl font-bold p-2">[X]</button>
+          </motion.div>
+        )}
+
         {showAssistant && (
           <>
             <motion.div
