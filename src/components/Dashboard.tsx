@@ -28,7 +28,7 @@ export function Dashboard({
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [resumeText, setResumeText] = useState<string>(user.resumeText || '');
   const [loadingResume, setLoadingResume] = useState(false);
-  const [activeTab, setActiveTab] = useState<'interviews' | 'resume'>('interviews');
+  const [activeTab, setActiveTab] = useState<'interviews' | 'resume' | 'profile'>('interviews');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -248,9 +248,88 @@ export function Dashboard({
             </div>
           </div>
         )}
+
+        {activeTab === 'profile' && (
+          <div className="max-w-4xl mx-auto space-y-8">
+            <section>
+              <h1 className="text-2xl font-bold tracking-tight mb-2">My Profile</h1>
+              <p className="text-zinc-400 text-sm">Update your account information and preferences.</p>
+              
+              <div className="mt-6 p-6 border border-zinc-800/50 bg-zinc-900/30 rounded-2xl space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Name</label>
+                    <input 
+                      type="text" 
+                      defaultValue={user.name} 
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Email</label>
+                    <input 
+                      type="email" 
+                      defaultValue={user.email} 
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    />
+                  </div>
+                </div>
+                <button className="bg-indigo-500 hover:bg-indigo-600 px-6 py-2.5 rounded-xl font-medium transition-colors">
+                  Save Changes
+                </button>
+              </div>
+            </section>
+
+            <section>
+              <div className="flex items-center gap-3 mb-6">
+                <CreditCard className="w-6 h-6 text-indigo-400" />
+                <h2 className="text-xl font-bold">Subscription & Credits</h2>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-6 border border-indigo-500/30 bg-indigo-500/5 rounded-2xl relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-3">
+                    <div className="bg-indigo-500 text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase">Current</div>
+                  </div>
+                  <h3 className="text-lg font-bold mb-1">Free Tier</h3>
+                  <p className="text-zinc-400 text-xs mb-4">Initial signup bonus</p>
+                  <div className="text-2xl font-bold mb-4">{user.credits} <span className="text-sm font-normal text-zinc-500">Left</span></div>
+                </div>
+
+                <div className="p-6 border border-zinc-800/50 bg-zinc-900/20 rounded-2xl hover:border-zinc-700 transition-all cursor-pointer group">
+                  <h3 className="text-lg font-bold mb-1 group-hover:text-indigo-400">Personalized Session</h3>
+                  <p className="text-zinc-400 text-xs mb-4">Pay per use / tailored AI</p>
+                  <div className="text-2xl font-bold mb-4">₹99 <span className="text-sm font-normal text-zinc-500">/ Session</span></div>
+                  <button className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm font-medium transition-colors">
+                    Upgrade Now
+                  </button>
+                </div>
+
+                <div className="p-6 border border-zinc-800/50 bg-zinc-900/20 rounded-2xl hover:border-zinc-700 transition-all cursor-pointer group">
+                  <h3 className="text-lg font-bold mb-1 group-hover:text-indigo-400">Pro Interviewer</h3>
+                  <p className="text-zinc-400 text-xs mb-4">Frequent practice sessions</p>
+                  <div className="text-2xl font-bold mb-4">₹299 <span className="text-sm font-normal text-zinc-500">/ Month</span></div>
+                  <p className="text-[10px] text-zinc-500 mb-4">• 5 Interviews per day<br/>• Priority AI models</p>
+                  <button className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm font-medium transition-colors">
+                    Explore Plan
+                  </button>
+                </div>
+              </div>
+            </section>
+            
+            <div className="md:hidden pt-8">
+              <button 
+                onClick={onLogout}
+                className="w-full flex items-center justify-center gap-3 p-4 bg-red-500/5 hover:bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 font-medium transition-all"
+              >
+                <LogOut className="w-5 h-5" />
+                Sign Out Account
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Mobile Bottom Navigation */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-zinc-900/90 backdrop-blur-lg border-t border-zinc-800/50 flex items-center justify-around p-3 pb-safe z-40">
         <button
           onClick={() => setActiveTab('interviews')}
@@ -260,7 +339,7 @@ export function Dashboard({
           )}
         >
           <Play className="w-5 h-5" />
-          <span className="text-[10px] font-medium">Interviews</span>
+          <span className="text-[10px] font-medium">Sessions</span>
         </button>
         <button
           onClick={() => setActiveTab('resume')}
@@ -271,6 +350,16 @@ export function Dashboard({
         >
           <FileText className="w-5 h-5" />
           <span className="text-[10px] font-medium">Resume</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('profile')}
+          className={cn(
+            "flex flex-col items-center gap-1 p-2 rounded-lg transition-colors flex-1",
+            activeTab === 'profile' ? "text-indigo-400" : "text-zinc-500 hover:text-zinc-300"
+          )}
+        >
+          <User className="w-5 h-5" />
+          <span className="text-[10px] font-medium">Profile</span>
         </button>
       </div>
     </div>
