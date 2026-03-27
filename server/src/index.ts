@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -17,7 +17,7 @@ app.use(cors());
 app.use(express.json());
 
 // Health Check
-app.get('/', (req, res) => {
+app.get('/', (req: Request, res: Response) => {
   res.send('INTRO AI Backend is Scribing! 🖊️');
 });
 
@@ -69,7 +69,7 @@ const User = mongoose.model('User', userSchema);
 const Interview = mongoose.model('Interview', interviewSchema);
 
 // Auth Routes
-app.post('/api/auth/signup', async (req, res) => {
+app.post('/api/auth/signup', async (req: Request, res: Response) => {
   try {
     const { email, password, name } = req.body;
     const existing = await User.findOne({ email });
@@ -85,7 +85,7 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
@@ -117,11 +117,11 @@ const authenticate = async (req: any, res: any, next: any) => {
 };
 
 // User Profile
-app.get('/api/user', authenticate, async (req: any, res) => {
+app.get('/api/user', authenticate, async (req: any, res: Response) => {
   res.json(req.user);
 });
 
-app.put('/api/user', authenticate, async (req: any, res) => {
+app.put('/api/user', authenticate, async (req: any, res: Response) => {
   try {
     const user = await User.findByIdAndUpdate(req.user._id, { $set: req.body }, { new: true });
     res.json(user);
@@ -131,7 +131,7 @@ app.put('/api/user', authenticate, async (req: any, res) => {
 });
 
 // Interviews
-app.get('/api/interviews', authenticate, async (req: any, res) => {
+app.get('/api/interviews', authenticate, async (req: any, res: Response) => {
   try {
     const interviews = await Interview.find({ userId: req.user._id }).sort({ createdAt: -1 });
     res.json(interviews);
@@ -141,7 +141,7 @@ app.get('/api/interviews', authenticate, async (req: any, res) => {
 });
 
 // Create Interview & Trigger Notifications
-app.post('/api/interviews', authenticate, async (req: any, res) => {
+app.post('/api/interviews', authenticate, async (req: any, res: Response) => {
   try {
     const user = req.user;
     
@@ -213,7 +213,7 @@ app.post('/api/interviews', authenticate, async (req: any, res) => {
 });
 
 // Delete Interview
-app.delete('/api/interviews/:id', async (req, res) => {
+app.delete('/api/interviews/:id', async (req: Request, res: Response) => {
   try {
     await Interview.findByIdAndDelete(req.params.id);
     res.json({ message: 'Deleted' });
@@ -223,7 +223,7 @@ app.delete('/api/interviews/:id', async (req, res) => {
 });
 
 // AI Endpoints
-app.post('/api/ai/generate', async (req, res) => {
+app.post('/api/ai/generate', async (req: Request, res: Response) => {
   const { question, resumeContext } = req.body;
   
   if (!process.env.GEMINI_API_KEY) {
@@ -259,7 +259,7 @@ app.post('/api/ai/generate', async (req, res) => {
   }
 });
 
-app.post('/api/ai/summarize', async (req, res) => {
+app.post('/api/ai/summarize', async (req: Request, res: Response) => {
   const { transcript } = req.body;
   
   if (!process.env.GEMINI_API_KEY) {
@@ -277,7 +277,7 @@ app.post('/api/ai/summarize', async (req, res) => {
   }
 });
 
-app.get('/api/ai/models', async (req, res) => {
+app.get('/api/ai/models', async (req: Request, res: Response) => {
   try {
     const response = await (genAI as any).models.list();
     res.json(response);
