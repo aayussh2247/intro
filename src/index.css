@@ -20,6 +20,10 @@
     -webkit-font-smoothing: antialiased;
     letter-spacing: -0.01em;
     line-height: 1.5;
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    touch-action: manipulation;
   }
 }
 
@@ -47,9 +51,10 @@
   }
 
   .paper-dots {
-    background-image: radial-gradient(#d1d5db 1.2px, transparent 1.2px);
+    background-image: radial-gradient(#d1d1d1 1px, transparent 1px); /* Modified from user's snippet */
     background-size: 24px 24px;
     background-color: var(--bg-paper);
+    min-height: 100vh; /* Added from user's snippet */
   }
 
   .paper-lines {
@@ -59,7 +64,7 @@
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
   }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: var(--ink-black);
+  .bottom-nav-safe {
+    padding-bottom: env(safe-area-inset-bottom, 24px);
   }
 }
