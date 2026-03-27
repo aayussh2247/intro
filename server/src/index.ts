@@ -452,7 +452,7 @@ app.post('/api/ai/generate', authenticate(), async (req: any, res: Response) => 
       for (const client of geminiClients) {
         try {
           const result = await (client as any).models.generateContent({
-            model: 'gemini-1.5-flash',
+            model: 'gemini-2.0-flash-lite',
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             system_instruction: SYSTEM_INSTRUCTION
           });
@@ -507,7 +507,7 @@ app.post('/api/ai/summarize', authenticate(), async (req: any, res: Response) =>
       for (const client of geminiClients) {
         try {
           const result = await (client as any).models.generateContent({
-            model: 'gemini-1.5-flash',
+            model: 'gemini-2.0-flash-lite',
             contents: [{ role: 'user', parts: [{ text: prompt }] }]
           });
           summary = (result.text || '').trim();

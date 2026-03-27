@@ -339,9 +339,9 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
               exit={{ height: 0 }}
               className="bg-yellow-400 border-b-4 border-black py-2 px-4 flex items-center justify-center gap-3 font-bold text-xs uppercase overflow-hidden"
             >
-              <VolumeX size={14} /> AUDIO SILENCED. NO TRANSCRIPTION.
+              <VolumeX size={14} /> MIC MUTED — SCRIBE STILL ACTIVE
             </motion.div>
-          )}CommandId
+          )}
         </AnimatePresence>
 
         {/* Main Content */}
