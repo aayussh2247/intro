@@ -183,7 +183,7 @@ app.post('/api/interviews', authenticate, async (req: any, res: Response) => {
         text: `Hello ${user.name},\n\nYour interview session "${interview.title}" has been saved successfully.\n\nSummary:\n${interview.summary}\n\nYou have ${user.credits} interviews left.\n\nTranscript is available in your dashboard.`
       };
 
-      transporter.sendMail(mailOptions).catch(err => console.error('Email error:', err));
+      transporter.sendMail(mailOptions).catch((err: any) => console.error('Email error:', err));
     }
 
     // Trigger n8n Webhooks
@@ -199,11 +199,11 @@ app.post('/api/interviews', authenticate, async (req: any, res: Response) => {
     };
 
     if (process.env.N8N_WEBHOOK_EMAIL) {
-      axios.post(process.env.N8N_WEBHOOK_EMAIL, payload).catch(err => console.error('n8n Email Webhook error:', err));
+      axios.post(process.env.N8N_WEBHOOK_EMAIL, payload).catch((err: any) => console.error('n8n Email Webhook error:', err));
     }
     
     if (process.env.N8N_WEBHOOK_WHATSAPP) {
-      axios.post(process.env.N8N_WEBHOOK_WHATSAPP, payload).catch(err => console.error('n8n WhatsApp Webhook error:', err));
+      axios.post(process.env.N8N_WEBHOOK_WHATSAPP, payload).catch((err: any) => console.error('n8n WhatsApp Webhook error:', err));
     }
 
     res.json({ interview, userCredits: user.credits });
