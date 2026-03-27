@@ -33,7 +33,6 @@ const getGeminiClients = () => {
   const keys = (process.env.GEMINI_API_KEY || '').split(',').map(k => k.trim()).filter(Boolean);
   return keys.map(apiKey => new GoogleGenAI({ apiKey }));
 };
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
 const AI_PROVIDER = 'gemini'; // Forced gemini over claude to fix credit issues
 const SYSTEM_INSTRUCTION = "You are a professional candidate. Answer instantly in ONE short sentence. Be conversational but concise. Use spoken human language.";
 
@@ -315,14 +314,8 @@ app.post('/api/user/verify-key', authenticate(), async (req: any, res: Response)
         model: 'gemini-1.5-flash', 
         contents: [{ role: 'user', parts: [{ text: 'Hi' }] }]
       });
-    } else if (provider === 'anthropic') {
-      const client = new Anthropic({ apiKey: key });
-      await client.messages.create({ model: 'claude-3-haiku-20240307', max_tokens: 1, messages: [{ role: 'user', content: 'Hi' }] });
-    } else if (provider === 'openai' || provider === 'kimi' || provider === 'grok') {
-      const baseUrl = provider === 'kimi' ? 'https://api.moonshot.cn/v1' 
-                    : provider === 'grok' ? 'https://api.x.ai/v1'
-                    : 'https://api.openai.com/v1';
-      await axios.get(`${baseUrl}/models`, { headers: { 'Authorization': `Bearer ${key}` } });
+    } else {
+       return res.status(400).json({ error: 'Only Gemini is supported at this time.' });
     }
     res.json({ success: true });
   } catch (err) {
