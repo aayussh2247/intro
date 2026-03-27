@@ -16,6 +16,11 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+// Health Check
+app.get('/', (req, res) => {
+  res.send('INTRO AI Backend is Scribing! 🖊️');
+});
+
 // AI Setup
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 const SYSTEM_INSTRUCTION = "You are a human candidate in an interview. Respond with the exact spoken words you would use. Keep it extremely short, simple, and conversational.";
