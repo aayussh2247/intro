@@ -35,7 +35,7 @@ const getGeminiClients = () => {
   return keys.map(apiKey => new GoogleGenAI({ apiKey }));
 };
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
-const AI_PROVIDER = process.env.AI_PROVIDER || 'gemini';
+const AI_PROVIDER = 'gemini'; // Forced gemini over claude to fix credit issues
 const SYSTEM_INSTRUCTION = "You are a professional candidate. Answer instantly in ONE short sentence. Be conversational but concise. Use spoken human language.";
 
 // MongoDB Connection
@@ -417,7 +417,8 @@ app.delete('/api/interviews/:id', async (req: Request, res: Response) => {
 
 // AI Endpoints
 app.post('/api/ai/generate', authenticate(), async (req: any, res: Response) => {
-  const { question, resumeContext, provider = AI_PROVIDER } = req.body;
+  const { question, resumeContext, provider: incomingProvider } = req.body;
+  const provider = 'gemini'; // FORCED to gemini to fix any credit issues with other providers
   
   try {
     const prompt = `
