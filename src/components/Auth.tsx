@@ -19,6 +19,18 @@ const Auth: React.FC<AuthProps> = ({ onSuccess }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate form
+    if (!formData.email || !formData.password) {
+      setError('Please fill in all fields');
+      return;
+    }
+    
+    if (!isLogin && !formData.name) {
+      setError('Name is required for signup');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -27,10 +39,16 @@ const Auth: React.FC<AuthProps> = ({ onSuccess }) => {
         ? await api.login({ email: formData.email, password: formData.password })
         : await api.signup(formData);
       
+      if (!res || !res.token) {
+        throw new Error('Invalid server response');
+      }
+      
       localStorage.setItem('auth_token', res.token);
       onSuccess(res.user);
     } catch (err: any) {
-      setError(err.message);
+      console.error('Auth error:', err);
+      const errorMsg = err.message || (isLogin ? 'Login failed' : 'Signup failed');
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }

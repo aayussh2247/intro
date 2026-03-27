@@ -1,18 +1,16 @@
 @import "tailwindcss";
 
-@import url('https://fonts.googleapis.com/css2?family=Gochi+Hand&family=Inter:wght@400;500;700;900&display=swap');
-
-:root {
-  --font-body: 'Inter', sans-serif;
-  --font-accent: 'Gochi Hand', cursive;
-  
-  --bg-paper: #fffef0; /* Warm paper cream */
-  --ink-black: #000000;
-  --marker-yellow: #ffcf40;
-  --border-width: 3px;
-}
-
 @layer base {
+  :root {
+    --font-body: 'Inter', sans-serif;
+    --font-accent: 'Gochi Hand', cursive;
+    
+    --bg-paper: #fffef0; /* Warm paper cream */
+    --ink-black: #000000;
+    --marker-yellow: #ffcf40;
+    --border-width: 3px;
+  }
+
   body {
     background-color: var(--bg-paper);
     color: var(--ink-black);

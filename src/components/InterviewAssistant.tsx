@@ -44,7 +44,7 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
   const [resumeContext, setResumeContext] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [provider, setProvider] = useState<'gemini' | 'claude' | 'openai' | 'kimi' | 'grok'>('gemini');
+  const [provider, setProvider] = useState<'gemini' | 'claude' | 'openai' | 'kimi' | 'grok'>('claude');
   const [fuel, setFuel] = useState<number>(100);
 
   const isMutedRef = useRef(isMuted);
@@ -293,7 +293,7 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
   return (
       <div 
         ref={nodeRef} 
-        className="bg-white flex flex-col h-screen w-screen fixed inset-0 z-50"
+        className="bg-white flex flex-col h-full w-full overflow-hidden"
       >
         {/* Header */}
         <div className="bg-black text-white p-3 flex items-center justify-between shrink-0">
@@ -400,22 +400,22 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
             </div>
 
             {/* Footer Commands */}
-            <div className="p-3 md:p-4 bg-zinc-900 border-t-4 border-black shrink-0 z-50">
+            <div className="p-4 bg-zinc-900 border-t-4 border-black shrink-0 z-50 w-full">
                {/* 3 Buttons Row */}
-               <div className="flex items-stretch gap-2 mb-3">
+               <div className="flex items-center gap-2 mb-3 w-full">
                 {/* START/STOP */}
                 <button
                   onClick={toggleListening}
                   type="button"
                   className={cn(
-                    "flex-1 py-3 md:py-4 font-accent text-base md:text-2xl font-bold transition-all flex items-center justify-center gap-2 border-2 border-white/20 rounded-lg active:scale-95 cursor-pointer",
+                    "flex-1 py-3 font-accent text-base font-bold transition-all flex items-center justify-center gap-2 border-2 border-white/20 rounded active:scale-95 cursor-pointer",
                     isListening 
                       ? "bg-red-600 text-white hover:bg-red-700" 
                       : "bg-red-500 text-white hover:bg-red-600"
                   )}
                 >
                   {isListening ? <MicOff size={20}/> : <Mic size={20}/>}
-                  <span className="hidden sm:inline">{isListening ? 'STOP' : 'START'}</span>
+                  <span className="hidden sm:inline text-sm">{isListening ? 'STOP' : 'START'}</span>
                 </button>
 
                 {/* MUTE/UNMUTE */}
@@ -423,29 +423,29 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
                   onClick={() => setIsMuted(!isMuted)}
                   type="button"
                   className={cn(
-                    "py-3 md:py-4 px-3 md:px-4 flex flex-col items-center justify-center border-2 rounded-lg transition-all active:scale-95 cursor-pointer font-accent font-bold",
+                    "py-3 px-4 flex flex-col items-center justify-center border-2 rounded transition-all active:scale-95 cursor-pointer font-accent font-bold",
                     isMuted 
                       ? "bg-yellow-400 text-black border-yellow-500 hover:bg-yellow-500" 
                       : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700"
                   )}
                 >
                   {isMuted ? <VolumeX size={20}/> : <Volume2 size={20}/>}
-                  <span className="text-[8px] md:text-[9px] font-black mt-1">{isMuted ? 'UNMUTE' : 'MUTE'}</span>
+                  <span className="text-[8px] font-black mt-1">{isMuted ? 'UNMUTE' : 'MUTE'}</span>
                 </button>
                 
                 {/* END SESSION */}
                 <button
                   onClick={handleEndSession}
                   type="button"
-                  className="py-3 md:py-4 px-3 md:px-4 bg-zinc-800 text-white hover:bg-red-600 transition-all border-2 border-zinc-700 rounded-lg flex flex-col items-center justify-center active:scale-95 cursor-pointer font-accent font-bold"
+                  className="py-3 px-4 bg-zinc-800 text-white hover:bg-red-600 transition-all border-2 border-zinc-700 rounded flex flex-col items-center justify-center active:scale-95 cursor-pointer font-accent font-bold"
                 >
                   <X size={20}/>
-                  <span className="text-[8px] md:text-[9px] font-black mt-1">END</span>
+                  <span className="text-[8px] font-black mt-1">END</span>
                 </button>
                </div>
 
                {/* Manual Input */}
-               <div className="flex gap-2">
+               <div className="flex gap-2 w-full">
                   <input 
                     value={manualInput}
                     onChange={(e) => setManualInput(e.target.value)}

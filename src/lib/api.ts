@@ -1,6 +1,15 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : 'https://intro-ai-backend.onrender.com/api');
 
-const getToken = () => localStorage.getItem('auth_token');
+// Debug logging for API configuration
+if (typeof window !== 'undefined') {
+  console.log('[API] Base URL:', API_BASE_URL);
+  console.log('[API] Environment:', import.meta.env.MODE);
+}
+
+const getToken = () => {
+  const token = localStorage.getItem('auth_token');
+  return token;
+};
 
 export interface Resume {
   id: string;
@@ -29,28 +38,46 @@ export interface User {
 export const api = {
   // Auth
   signup: async (data: any) => {
-    const res = await fetch(`${API_BASE_URL}/auth/signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || 'Signup failed');
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || `Signup failed: ${res.statusText}`);
+      }
+      const result = await res.json();
+      if (!result.token || !result.user) {
+        throw new Error('Invalid response format from server');
+      }
+      return result;
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      throw error;
     }
-    return res.json();
   },
   login: async (data: any) => {
-    const res = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || 'Login failed');
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || `Login failed: ${res.statusText}`);
+      }
+      const result = await res.json();
+      if (!result.token || !result.user) {
+        throw new Error('Invalid response format from server');
+      }
+      return result;
+    } catch (error: any) {
+      console.error('Login error:', error);
+      throw error;
     }
-    return res.json();
   },
   forgotPassword: async (email: string) => {
     const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
@@ -70,11 +97,21 @@ export const api = {
   },
 
   getUser: async () => {
-    const res = await fetch(`${API_BASE_URL}/user`, {
-      headers: { 'Authorization': `Bearer ${getToken()}` },
-    });
-    if (!res.ok) throw new Error('Failed to fetch user');
-    return res.json();
+    try {
+      const res = await fetch(`${API_BASE_URL}/user`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem('auth_token');
+        }
+        throw new Error(`Failed to fetch user: ${res.statusText}`);
+      }
+      return res.json();
+    } catch (error: any) {
+      console.error('Get user error:', error);
+      throw error;
+    }
   },
   updateUser: async (data: any) => {
     const res = await fetch(`${API_BASE_URL}/user`, {

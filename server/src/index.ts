@@ -15,8 +15,12 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://localhost:3000', 'https://intro-ai.vercel.app', 'https://intro-ai-frontend.onrender.com'],
+  credentials: true
+}));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Health Check
 app.get('/', (req: Request, res: Response) => {
@@ -112,13 +116,29 @@ const transporter = nodemailer.createTransport({
 app.post('/api/auth/signup', async (req: Request, res: Response) => {
   try {
     const { email, password, name } = req.body;
+    
+    // Validation
+    if (!email || !password || !name) {
+      return res.status(400).json({ error: 'Email, password, and name are required' });
+    }
+    
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    
     const existing = await User.findOne({ email });
     if (existing) return res.status(400).json({ error: 'Email already exists' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await User.create({ email, password: hashedPassword, name, credits: 3 });
+    const user = await User.create({ 
+      email, 
+      password: hashedPassword, 
+      name, 
+      credits: 3,
+      fuel: 100 
+    });
     
-    // Welcome Email
+    // Welcome Email (non-blocking)
     if (process.env.EMAIL_USER) {
       transporter.sendMail({
         from: `INTRO AI <${process.env.EMAIL_USER}>`,
@@ -128,23 +148,40 @@ app.post('/api/auth/signup', async (req: Request, res: Response) => {
       }).catch(err => console.error('Welcome email error:', err));
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email, credits: user.credits } });
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || 'secret', { expiresIn: '30d' });
+    return res.json({ 
+      token, 
+      user: { 
+        id: user._id, 
+        name: user.name, 
+        email: user.email, 
+        credits: user.credits,
+        fuel: user.fuel,
+        plan: user.plan 
+      } 
+    });
+  } catch (err: any) {
+    console.error('Signup error:', err);
+    res.status(500).json({ error: err.message || 'Signup failed' });
   }
 });
 
 app.post('/api/auth/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
+    
+    // Validation
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+    
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ error: 'User not found' });
+    if (!user) return res.status(401).json({ error: 'User not found' });
 
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(400).json({ error: 'Invalid password' });
+    if (!match) return res.status(401).json({ error: 'Invalid password' });
 
-    // Login Alert
+    // Login Alert (non-blocking)
     if (process.env.EMAIL_USER) {
       transporter.sendMail({
         from: `INTRO AI <${process.env.EMAIL_USER}>`,
@@ -154,10 +191,22 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
       }).catch(err => console.error('Login email error:', err));
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email, credits: user.credits, plan: user.plan } });
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || 'secret', { expiresIn: '30d' });
+    return res.json({ 
+      token, 
+      user: { 
+        id: user._id, 
+        name: user.name, 
+        email: user.email, 
+        credits: user.credits,
+        fuel: user.fuel,
+        plan: user.plan,
+        resumes: user.resumes || []
+      } 
+    });
+  } catch (err: any) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: err.message || 'Login failed' });
   }
 });
 
