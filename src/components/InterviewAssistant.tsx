@@ -280,64 +280,35 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Draggable nodeRef={nodeRef} handle=".drag-handle" bounds="parent" disabled={isFullScreen || isMobile}>
       <div 
         ref={nodeRef} 
-        className={cn(
-          "bg-white border-4 border-black shadow-sketch flex flex-col transition-all duration-300 z-[1001] fixed md:absolute",
-          isFullScreen ? "inset-4" : "bottom-4 right-4 w-full md:w-[600px] h-[700px]",
-          isMobile && "inset-0 border-0 shadow-none h-full w-full",
-          isMinimized && "h-20 w-80 overflow-hidden"
-        )}
+        className="bg-white flex flex-col h-full w-full"
       >
         {/* Header */}
-        <div className="drag-handle bg-black text-white p-4 flex items-center justify-between cursor-move shrink-0">
-          <div className="flex items-center gap-4">
+        <div className="bg-black text-white p-3 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
             <div className={cn("w-3 h-3 rounded-full animate-pulse", isListening ? (isMuted ? "bg-yellow-400" : "bg-red-500") : "bg-zinc-600")} />
-            <span className="font-accent text-2xl font-bold tracking-tight">
-              {isMinimized ? '[ INK STATUS ]' : 'SCRIBING LIVE...'}
+            <span className="font-accent text-lg md:text-2xl font-bold tracking-tight">
+              SCRIBING LIVE...
             </span>
-            {!isMinimized && (
-              <div className="hidden sm:flex items-center gap-2 ml-4 px-3 py-1 bg-zinc-900 border border-zinc-700 rounded-full">
-                <Zap size={12} className="text-yellow-400 fill-yellow-400" />
-                <span className="text-[10px] font-bold uppercase">{fuel}% FUEL</span>
-              </div>
-            )}
           </div>
           
-          <div className="flex items-center gap-3">
-            {!isMinimized && (
-              <>
-                <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-1 hover:text-yellow-400 transition-colors">
-                  {isFullScreen ? <Shrink size={20}/> : <Expand size={20}/>}
-                </button>
-                <button onClick={() => setIsMinimized(!isMinimized)} className="p-1 hover:text-yellow-400 transition-colors">
-                  <Minimize2 size={20}/>
-                </button>
-              </>
-            )}
-            {isMinimized && (
-              <button onClick={() => setIsMinimized(false)} className="p-1 hover:text-yellow-400 transition-colors">
-                <Maximize2 size={20}/>
-              </button>
-            )}
-            <button 
-              onClick={handleEndSession} 
-              className="p-1 hover:text-red-500 transition-colors"
-            >
-              <X size={20}/>
-            </button>
-          </div>
+          <button 
+            onClick={handleEndSession} 
+            className="p-2 hover:text-red-500 transition-colors"
+          >
+            <X size={24}/>
+          </button>
         </div>
 
         {/* Status Bar for Muted */}
         <AnimatePresence>
-          {isMuted && !isMinimized && (
+          {isMuted && (
             <motion.div 
               initial={{ height: 0 }}
               animate={{ height: 'auto' }}
               exit={{ height: 0 }}
-              className="bg-yellow-400 border-b-4 border-black py-2 px-4 flex items-center justify-center gap-3 font-bold text-xs uppercase overflow-hidden"
+              className="bg-yellow-400 border-b-2 border-black py-2 px-4 flex items-center justify-center gap-3 font-bold text-xs uppercase overflow-hidden"
             >
               <VolumeX size={14} /> MIC MUTED — SCRIBE STILL ACTIVE
             </motion.div>
@@ -345,9 +316,7 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
         </AnimatePresence>
 
         {/* Main Content */}
-        {!isMinimized && (
-          <>
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-white paper-dots custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-white paper-dots custom-scrollbar">
               {messages.length === 0 && !currentTranscript && (
                 <div className="h-full flex flex-col items-center justify-center text-zinc-300 text-center space-y-4">
                   <Bot size={64} className="opacity-20 translate-y-4" />
@@ -479,9 +448,6 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
                   </button>
                </div>
             </div>
-          </>
-        )}
       </div>
-    </Draggable>
   );
 }

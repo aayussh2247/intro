@@ -153,11 +153,9 @@ export default function App() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center p-4 md:p-10"
+              className="fixed inset-0 z-50"
             >
-              <div className="pointer-events-auto w-full max-w-5xl h-full flex items-center justify-center">
-                <InterviewAssistant onClose={() => setShowAssistant(false)} />
-              </div>
+              <InterviewAssistant onClose={() => setShowAssistant(false)} />
             </motion.div>
           </>
         )}
