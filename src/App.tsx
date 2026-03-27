@@ -4,7 +4,7 @@ import { Dashboard } from './components/Dashboard';
 import { InterviewAssistant } from './components/InterviewAssistant';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import Auth from './components/Auth';
-import { Loader2, Bot } from 'lucide-react';
+import { Loader2, Bot, Download, Smartphone } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
@@ -29,9 +29,11 @@ export default function App() {
     const handleBeforeInstall = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      // Only show if user hasn't seen it recently (optional)
+      
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
       const hasDismissed = localStorage.getItem('pwa_dismissed');
-      if (!hasDismissed) {
+      
+      if (!hasDismissed && !isStandalone) {
         setShowInstallBanner(true);
       }
     };
@@ -112,18 +114,28 @@ export default function App() {
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
-            className="fixed bottom-24 md:bottom-8 left-4 right-4 md:left-auto md:right-8 md:w-96 z-[100] bg-yellow-400 border-4 border-black hand-drawn shadow-sketch p-6 flex items-center justify-between gap-4"
+            className="fixed bottom-24 md:bottom-8 left-4 right-4 md:left-auto md:right-8 md:w-96 z-[100] bg-yellow-400 border-4 border-black hand-drawn shadow-sketch p-5 flex items-start gap-5"
           >
-            <div className="flex-1">
-              <p className="font-accent text-lg font-bold leading-tight">Download the Notebook for a better experience 🖋️</p>
-              <button 
-                onClick={handleInstallClick}
-                className="mt-3 bg-black text-white px-6 py-2 font-bold text-sm hand-drawn hover:scale-105 transition-transform"
-              >
-                Inscribe App
-              </button>
+            <div className="w-12 h-12 bg-black flex items-center justify-center shrink-0 -rotate-3 hand-drawn">
+              <Download className="w-7 h-7 text-yellow-400" />
             </div>
-            <button onClick={dismissInstall} className="font-accent text-xl font-bold p-2">[X]</button>
+            <div className="flex-1">
+              <p className="font-accent text-xl font-bold leading-tight">Inscribe this notebook to your home screen! 🖋️</p>
+              <div className="mt-4 flex items-center gap-4">
+                <button 
+                  onClick={handleInstallClick}
+                  className="bg-black text-white px-6 py-2 font-bold text-sm hand-drawn hover:scale-105 transition-transform"
+                >
+                  Download App
+                </button>
+                <button 
+                  onClick={dismissInstall} 
+                  className="font-accent text-lg font-bold hover:text-red-600 transition-colors"
+                >
+                  [ Skip ]
+                </button>
+              </div>
+            </div>
           </motion.div>
         )}
 
