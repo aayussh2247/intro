@@ -1,0 +1,5 @@
+{
+  "name": "INTRO AI",
+  "description": "A real-time AI interview assistant that listens to live interviews and provides intelligent, personalized answers based on your resume.",
+  "requestFramePermissions": ["microphone"]
+}
