@@ -1,20 +1,65 @@
 @import "tailwindcss";
 
-@layer utilities {
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom);
+@import url('https://fonts.googleapis.com/css2?family=Gochi+Hand&family=Inter:wght@400;500;700;900&display=swap');
+
+:root {
+  --font-body: 'Inter', sans-serif;
+  --font-accent: 'Gochi Hand', cursive;
+  
+  --bg-paper: #fffef0; /* Warm paper cream */
+  --ink-black: #000000;
+  --marker-yellow: #ffcf40;
+  --border-width: 3px;
+}
+
+@layer base {
+  body {
+    background-color: var(--bg-paper);
+    color: var(--ink-black);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.01em;
+    line-height: 1.5;
   }
+}
+
+@layer utilities {
+  .hand-drawn {
+    border: var(--border-width) solid var(--ink-black);
+    background: white;
+    transform: rotate(-0.5deg);
+  }
+  
+  .hand-drawn:nth-child(even) {
+    transform: rotate(0.4deg);
+  }
+
+  .shadow-sketch {
+    box-shadow: 8px 8px 0px 0px var(--ink-black);
+  }
+
+  .marker {
+    background: var(--marker-yellow);
+    padding: 0px 6px;
+    box-decoration-break: clone;
+    font-weight: 900;
+    font-family: var(--font-accent);
+  }
+
+  .paper-dots {
+    background-image: radial-gradient(#d1d5db 1.2px, transparent 1.2px);
+    background-size: 24px 24px;
+    background-color: var(--bg-paper);
+  }
+
+  .paper-lines {
+    background-image: repeating-linear-gradient(transparent, transparent 31px, #e5e7eb 31px, #e5e7eb 32px);
+  }
+
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
   }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #3f3f46;
-    border-radius: 10px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #52525b;
+    background: var(--ink-black);
   }
 }

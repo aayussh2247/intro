@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Bot, FileText, Plus, Settings, Trash2, Play, LogOut, CreditCard, User } from 'lucide-react';
 import { cn } from '../lib/utils';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -29,6 +29,14 @@ export function Dashboard({
   const [resumeText, setResumeText] = useState<string>(user.resumeText || '');
   const [loadingResume, setLoadingResume] = useState(false);
   const [activeTab, setActiveTab] = useState<'interviews' | 'resume' | 'profile'>('interviews');
+  const [notification, setNotification] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -59,8 +67,21 @@ export function Dashboard({
         fullText += pageText + '\n';
       }
 
-      await api.updateUser({ resumeText: fullText });
-      setResumeText(fullText);
+      const newResume = {
+        id: Math.random().toString(36).substr(2, 9),
+        name: file.name,
+        text: fullText,
+        createdAt: new Date().toISOString()
+      };
+
+      const updatedResumes = [...(user.resumes || []), newResume];
+      await api.updateUser({ resumes: updatedResumes });
+      
+      // Update local user state if possible, or just refresh/wait for parent update
+      // For now, let's assume we need to refresh or the parent handles it.
+      // But usually we'd want to update the local 'user' prop if we can.
+      // Since 'user' is a prop, we should ideally have an 'onUserUpdate' callback.
+      window.location.reload(); // Quickest way to sync state for now without refactoring too much
     } catch (error) {
       console.error('Error parsing PDF:', error);
       alert('Failed to parse PDF. Please try again.');
@@ -69,8 +90,19 @@ export function Dashboard({
     }
   };
 
+  const handleDeleteResume = async (resumeId: string) => {
+    if (!confirm('Discard this resume context?')) return;
+    try {
+      const updatedResumes = user.resumes.filter((r: any) => r.id !== resumeId);
+      await api.updateUser({ resumes: updatedResumes });
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to delete resume:', error);
+    }
+  };
+
   const handleDeleteInterview = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this interview?')) return;
+    if (!confirm('Tear this session from the notebook?')) return;
     try {
       await api.deleteInterview(id);
       setInterviews(prev => prev.filter(i => i.id !== id));
@@ -79,287 +111,339 @@ export function Dashboard({
     }
   };
 
+  const [newName, setNewName] = useState(user.name);
+  const handleUpdateProfile = async () => {
+    try {
+      await api.updateUser({ name: newName });
+      setNotification('Identity updated on the paper! 🖋️');
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err) {
+      console.error('Update error', err);
+    }
+  };
+
+  const handleComingSoon = () => {
+    setNotification('Feature coming soon to your notebook! 🖋️');
+  };
+
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col md:flex-row">
-      {/* Sidebar (Desktop) / Top & Bottom Nav (Mobile) */}
-      <div className="hidden md:flex w-64 border-r border-zinc-800/50 bg-zinc-900/20 p-4 flex-col">
-        <div className="flex items-center gap-3 px-2 mb-8">
-          <div className="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center border border-indigo-500/30">
-            <Bot className="w-5 h-5 text-indigo-400" />
-          </div>
-          <span className="font-semibold tracking-tight text-lg">INTRO AI</span>
+    <div className="min-h-screen paper-dots text-black flex flex-col md:flex-row font-body selection:bg-yellow-300">
+      <AnimatePresence>
+        {notification && (
+          <motion.div 
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -100, opacity: 0 }}
+            className="fixed top-20 md:top-8 left-1/2 -translate-x-1/2 z-[100] bg-yellow-400 border-4 border-black hand-drawn px-8 py-3 font-bold shadow-sketch"
+          >
+            {notification}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* Sidebar (Desktop) */}
+      <div className="hidden md:flex w-80 border-r-4 border-black p-8 flex-col bg-white">
+        <div className="flex items-center gap-3 mb-16">
+          <span className="font-accent text-5xl font-bold italic">
+            <span className="marker">INTRO</span> AI
+          </span>
         </div>
 
-        <nav className="flex-1 space-y-1">
+        <nav className="flex-1 space-y-8">
           <button
             onClick={() => setActiveTab('interviews')}
             className={cn(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-              activeTab === 'interviews' ? "bg-zinc-800 text-white" : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+              "w-full text-left font-accent text-3xl font-bold transition-all relative group",
+              activeTab === 'interviews' ? "text-black underline decoration-yellow-400 decoration-8 underline-offset-4" : "text-zinc-400 hover:text-black"
             )}
           >
-            <Play className="w-4 h-4" />
-            Interviews
+            . Sessions
           </button>
           <button
             onClick={() => setActiveTab('resume')}
             className={cn(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-              activeTab === 'resume' ? "bg-zinc-800 text-white" : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+              "w-full text-left font-accent text-3xl font-bold transition-all relative",
+              activeTab === 'resume' ? "text-black underline decoration-yellow-400 decoration-8 underline-offset-4" : "text-zinc-400 hover:text-black"
             )}
           >
-            <FileText className="w-4 h-4" />
-            Resume Context
+            . My Resumes
+          </button>
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={cn(
+              "w-full text-left font-accent text-3xl font-bold transition-all relative",
+              activeTab === 'profile' ? "text-black underline decoration-yellow-400 decoration-8 underline-offset-4" : "text-zinc-400 hover:text-black"
+            )}
+          >
+            . Profile
           </button>
         </nav>
 
-        <div className="mt-auto pt-4 border-t border-zinc-800/50 space-y-4">
-          <div className="px-3 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
-            <div className="flex items-center gap-2 mb-1">
-              <CreditCard className="w-4 h-4 text-indigo-400" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">Interviews Left</span>
-            </div>
-            <p className="text-lg font-bold text-white">{user?.credits || 0}</p>
+        <div className="mt-auto space-y-10">
+          <div className="p-6 bg-white hand-drawn rotate-1">
+            <span className="text-sm font-bold uppercase tracking-widest block mb-2">Practice Ink</span>
+            <p className="text-5xl font-accent font-bold tracking-tighter">
+              {user?.credits || 0} <span className="text-xl">Left</span>
+            </p>
           </div>
 
-          <div className="px-3 py-2 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center border border-zinc-700">
-                 <User className="w-4 h-4 text-zinc-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{user?.name || 'User'}</p>
-              </div>
-            </div>
-            <button 
-              onClick={onLogout}
-              className="p-2 hover:bg-red-500/10 text-zinc-500 hover:text-red-400 rounded-lg transition-colors"
-              title="Logout"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+          <button 
+            onClick={onLogout}
+            className="w-full text-left font-accent text-2xl font-bold text-red-600 hover:underline"
+          >
+            [ Sign Out ]
+          </button>
         </div>
       </div>
 
       {/* Mobile Header */}
-      <div className="md:hidden flex items-center justify-between p-4 border-b border-zinc-800/50 bg-zinc-900/20">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center border border-indigo-500/30">
-            <Bot className="w-5 h-5 text-indigo-400" />
-          </div>
-          <span className="font-semibold tracking-tight text-lg">INTRO AI</span>
-        </div>
+      <div className="md:hidden flex items-center justify-between p-4 bg-white border-b-4 border-black sticky top-0 z-50">
+        <span className="font-accent text-3xl font-bold italic">
+          <span className="marker px-2 text-2xl">INTRO</span> AI
+        </span>
+        <button onClick={onLogout} className="p-2 bg-red-50 border-2 border-black rounded-sm active:translate-y-0.5 transition-transform">
+          <LogOut className="w-5 h-5 text-red-600" />
+        </button>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8">
+      <div className="flex-1 p-5 md:p-16 overflow-y-auto pb-40 md:pb-16 custom-scrollbar">
         {activeTab === 'interviews' && (
-          <div className="max-w-4xl mx-auto">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="max-w-4xl mx-auto space-y-12"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-8 mb-4">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Your Interviews</h1>
-                <p className="text-zinc-400 mt-1 text-sm">Review past sessions or start a new one.</p>
+                <h1 className="text-5xl md:text-6xl font-accent font-bold leading-tight">
+                  <span className="marker text-3xl md:text-4xl leading-none">Activity</span> Log
+                </h1>
+                <p className="text-zinc-500 text-lg md:text-xl italic mt-1 font-body">Recent interview doodles.</p>
               </div>
               <button
                 onClick={onLaunchAssistant}
-                className="flex items-center justify-center gap-2 px-4 py-3 sm:py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl sm:rounded-lg font-medium transition-colors shadow-lg shadow-indigo-500/20 w-full sm:w-auto"
+                className="w-full sm:w-auto bg-black text-white font-bold text-xl md:text-2xl px-8 md:px-10 py-4 md:py-5 hover:shadow-sketch active:translate-y-1 transition-all hand-drawn"
               >
-                <Plus className="w-5 h-5 sm:w-4 sm:h-4" />
-                Launch Assistant
+                + Start Session
               </button>
             </div>
 
-            {interviews.length === 0 ? (
-              <div className="text-center py-20 border border-dashed border-zinc-800 rounded-2xl bg-zinc-900/20">
-                <Bot className="w-12 h-12 text-zinc-600 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-zinc-300">No interviews yet</h3>
-                <p className="text-zinc-500 mt-1 text-sm">Launch the assistant to start your first session.</p>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {interviews.map((interview) => (
+            <div className="grid gap-10">
+              {interviews.length === 0 ? (
+                <div className="bg-white hand-drawn shadow-sketch p-16 text-center rotate-1">
+                  <h3 className="text-4xl font-accent font-bold text-zinc-300">Clean Sheet...</h3>
+                  <p className="text-zinc-400 mt-2 text-xl font-body">Click the marker to start your first session.</p>
+                </div>
+              ) : (
+                interviews.map((interview, idx) => (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
                     key={interview.id}
-                    className="p-5 border border-zinc-800/50 bg-zinc-900/30 rounded-xl hover:border-zinc-700 transition-colors group"
+                    className="bg-white hand-drawn shadow-sketch p-8 group relative"
                   >
                     <div className="flex items-start justify-between">
                       <div>
-                        <h3 className="font-semibold text-lg">{interview.title}</h3>
-                        <p className="text-xs text-zinc-500 mt-1">
-                          {new Date(interview.createdAt).toLocaleDateString()} • {new Date(interview.createdAt).toLocaleTimeString()}
+                        <h3 className="font-accent text-3xl font-bold group-hover:text-blue-900 transition-colors">
+                           {interview.title}
+                        </h3>
+                        <p className="text-zinc-400 text-sm italic mt-2">
+                           Scribed on {new Date(interview.createdAt).toLocaleDateString()}
                         </p>
                       </div>
                       <button
                         onClick={() => handleDeleteInterview(interview.id)}
-                        className="p-2 text-zinc-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                        className="p-3 text-red-200 hover:text-red-600 transition-colors"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-6 h-6" />
                       </button>
                     </div>
                     {interview.summary && (
-                      <div className="mt-4 p-3 bg-zinc-950/50 rounded-lg border border-zinc-800/50 text-sm text-zinc-300">
-                        <p className="font-medium text-zinc-400 mb-1 text-xs uppercase tracking-wider">Summary</p>
-                        {interview.summary}
+                      <div className="mt-8 p-6 bg-yellow-50/50 border-l-8 border-yellow-400 text-xl font-body italic leading-relaxed">
+                        "{interview.summary}"
                       </div>
                     )}
                   </motion.div>
-                ))}
-              </div>
-            )}
-          </div>
+                ))
+              )}
+            </div>
+          </motion.div>
         )}
 
         {activeTab === 'resume' && (
-          <div className="max-w-3xl mx-auto">
-            <div className="mb-8">
-              <h1 className="text-2xl font-bold tracking-tight">Resume Context</h1>
-              <p className="text-zinc-400 mt-1 text-sm">Upload your resume. The AI will use this context to personalize answers.</p>
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="max-w-4xl mx-auto space-y-8 md:space-y-12"
+          >
+            <div>
+              <h1 className="text-5xl md:text-6xl font-accent font-bold"><span className="marker text-3xl md:text-4xl">Brain</span> Dump</h1>
+              <p className="text-zinc-500 text-base md:text-xl italic mt-1 font-body">Upload resumes for AI training.</p>
             </div>
 
-            <div className="p-6 border border-zinc-800/50 bg-zinc-900/30 rounded-xl">
-              <div className="flex items-center justify-center w-full">
-                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-zinc-700 border-dashed rounded-lg cursor-pointer bg-zinc-900/50 hover:bg-zinc-800/50 hover:border-indigo-500/50 transition-all">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
+              <div className="space-y-8">
+                <h2 className="text-3xl font-accent font-bold border-b-4 border-black pb-2 inline-block">Active Source</h2>
+                <div className="space-y-6">
+                  {(user.resumes || []).length === 0 ? (
+                    <div className="p-12 bg-white hand-drawn border-dashed border-4 border-zinc-200 text-center">
+                      <p className="text-zinc-400 text-xl">The AI knows nothing yet.</p>
+                    </div>
+                  ) : (
+                    user.resumes.map((res: any) => (
+                      <div key={res.id} className="bg-white hand-drawn p-6 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <FileText className="w-8 h-8 text-black" />
+                          <div>
+                            <p className="font-bold text-xl">{res.name}</p>
+                            <p className="text-xs uppercase tracking-tighter text-zinc-400">Memory Loaded</p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => handleDeleteResume(res.id)}
+                          className="text-red-300 hover:text-red-600 p-2"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white hand-drawn shadow-sketch p-10 rotate-1">
+                 <h2 className="text-3xl font-accent font-bold mb-8">Add Context</h2>
+                 <label className="flex flex-col items-center justify-center w-full h-56 border-4 border-black border-dashed cursor-pointer hover:bg-yellow-50 transition-all group">
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     {loadingResume ? (
-                      <div className="w-6 h-6 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-2" />
+                      <div className="w-12 h-12 border-4 border-zinc-200 border-t-black rounded-full animate-spin mb-4" />
                     ) : (
-                      <FileText className="w-8 h-8 text-zinc-500 mb-2" />
+                      <div className="text-6xl text-zinc-300 group-hover:text-black mb-4">+</div>
                     )}
-                    <p className="mb-2 text-sm text-zinc-400">
-                      <span className="font-semibold">Click to upload</span> or drag and drop
-                    </p>
-                    <p className="text-xs text-zinc-500">PDF (MAX. 5MB)</p>
+                    <p className="font-bold text-xl text-zinc-500 group-hover:text-black">Drop PDF Here</p>
                   </div>
                   <input type="file" className="hidden" accept="application/pdf" onChange={handleFileUpload} disabled={loadingResume} />
                 </label>
               </div>
-
-              {resumeText && (
-                <div className="mt-6">
-                  <h3 className="text-sm font-medium text-zinc-300 mb-2">Extracted Text Preview</h3>
-                  <div className="p-4 bg-zinc-950 rounded-lg border border-zinc-800/50 h-64 overflow-y-auto text-xs text-zinc-400 font-mono whitespace-pre-wrap">
-                    {resumeText}
-                  </div>
-                </div>
-              )}
             </div>
-          </div>
+          </motion.div>
         )}
 
         {activeTab === 'profile' && (
-          <div className="max-w-4xl mx-auto space-y-8">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="max-w-4xl mx-auto space-y-10 md:space-y-16"
+          >
             <section>
-              <h1 className="text-2xl font-bold tracking-tight mb-2">My Profile</h1>
-              <p className="text-zinc-400 text-sm">Update your account information and preferences.</p>
+              <h1 className="text-5xl md:text-6xl font-accent font-bold"><span className="marker text-3xl md:text-4xl">Details</span></h1>
+              <p className="text-zinc-500 text-base md:text-xl italic mt-1 font-body">Manage your identity.</p>
               
-              <div className="mt-6 p-6 border border-zinc-800/50 bg-zinc-900/30 rounded-2xl space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Name</label>
-                    <input 
-                      type="text" 
-                      defaultValue={user.name} 
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Email</label>
-                    <input 
-                      type="email" 
-                      defaultValue={user.email} 
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-                    />
-                  </div>
+              <div className="mt-12 bg-white hand-drawn shadow-sketch p-12 flex flex-col md:flex-row gap-16 items-center rotate-1">
+                <div className="w-40 h-40 border-4 border-black flex items-center justify-center -rotate-3 bg-yellow-100 flex-shrink-0">
+                  <span className="text-8xl font-accent font-bold">{user.name?.[0] || 'U'}</span>
                 </div>
-                <button className="bg-indigo-500 hover:bg-indigo-600 px-6 py-2.5 rounded-xl font-medium transition-colors">
-                  Save Changes
-                </button>
+                
+                <div className="flex-1 w-full space-y-12">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                    <div className="space-y-4">
+                      <label className="text-sm font-bold uppercase tracking-widest text-zinc-400">Full Name</label>
+                      <input 
+                        type="text" 
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        className="w-full bg-transparent border-b-4 border-black py-3 text-2xl font-bold focus:outline-none focus:border-yellow-500"
+                      />
+                    </div>
+                    <div className="space-y-4">
+                      <label className="text-sm font-bold uppercase tracking-widest text-zinc-400">Email (Permanent)</label>
+                      <input 
+                        type="email" 
+                        defaultValue={user.email} 
+                        className="w-full bg-transparent border-b-4 border-zinc-200 py-3 text-2xl font-bold text-zinc-300"
+                        disabled
+                      />
+                    </div>
+                  </div>
+                  <button 
+                    onClick={handleUpdateProfile}
+                    className="bg-black text-white font-bold text-2xl px-12 py-4 hover:shadow-sketch active:translate-y-1 transition-all"
+                  >
+                    Save Changes
+                  </button>
+                </div>
               </div>
             </section>
 
             <section>
-              <div className="flex items-center gap-3 mb-6">
-                <CreditCard className="w-6 h-6 text-indigo-400" />
-                <h2 className="text-xl font-bold">Subscription & Credits</h2>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-6 border border-indigo-500/30 bg-indigo-500/5 rounded-2xl relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-3">
-                    <div className="bg-indigo-500 text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase">Current</div>
-                  </div>
-                  <h3 className="text-lg font-bold mb-1">Free Tier</h3>
-                  <p className="text-zinc-400 text-xs mb-4">Initial signup bonus</p>
-                  <div className="text-2xl font-bold mb-4">{user.credits} <span className="text-sm font-normal text-zinc-500">Left</span></div>
+              <h2 className="text-4xl md:text-5xl font-accent font-bold mb-8 md:mb-10"><span className="marker text-2xl md:text-3xl">Ink</span> Plans</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
+                <div className="bg-white hand-drawn p-6 md:p-8 text-center rotate-1">
+                  <h3 className="text-2xl md:text-3xl font-accent font-bold mb-3 md:mb-4">Free Tier</h3>
+                  <p className="text-5xl md:text-6xl font-accent font-bold mb-3 md:mb-4">{user.credits}</p>
+                  <p className="text-zinc-400 text-base md:text-lg font-body italic">Available Sessions</p>
                 </div>
 
-                <div className="p-6 border border-zinc-800/50 bg-zinc-900/20 rounded-2xl hover:border-zinc-700 transition-all cursor-pointer group">
-                  <h3 className="text-lg font-bold mb-1 group-hover:text-indigo-400">Personalized Session</h3>
-                  <p className="text-zinc-400 text-xs mb-4">Pay per use / tailored AI</p>
-                  <div className="text-2xl font-bold mb-4">₹99 <span className="text-sm font-normal text-zinc-500">/ Session</span></div>
-                  <button className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm font-medium transition-colors">
-                    Upgrade Now
+                <div className="bg-white hand-drawn shadow-sketch p-6 md:p-8 text-center -rotate-1 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-2 marker text-[10px] md:text-xs font-bold rotate-12 -mr-1 -mt-1 font-body">POPULAR</div>
+                  <h3 className="text-2xl md:text-3xl font-accent font-bold mb-3 md:mb-4 group-hover:text-yellow-600 transition-colors">The Scribe</h3>
+                  <p className="text-5xl md:text-6xl font-accent font-bold mb-6 md:mb-8 font-body">₹99</p>
+                  <button 
+                    onClick={handleComingSoon}
+                    className="w-full py-3 md:py-4 border-4 border-black font-bold text-lg md:text-xl hover:bg-black hover:text-white transition-all"
+                  >
+                    Upgrade
                   </button>
                 </div>
 
-                <div className="p-6 border border-zinc-800/50 bg-zinc-900/20 rounded-2xl hover:border-zinc-700 transition-all cursor-pointer group">
-                  <h3 className="text-lg font-bold mb-1 group-hover:text-indigo-400">Pro Interviewer</h3>
-                  <p className="text-zinc-400 text-xs mb-4">Frequent practice sessions</p>
-                  <div className="text-2xl font-bold mb-4">₹299 <span className="text-sm font-normal text-zinc-500">/ Month</span></div>
-                  <p className="text-[10px] text-zinc-500 mb-4">• 5 Interviews per day<br/>• Priority AI models</p>
-                  <button className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm font-medium transition-colors">
-                    Explore Plan
+                <div className="bg-yellow-100 hand-drawn shadow-sketch p-6 md:p-8 text-center rotate-1 group">
+                  <h3 className="text-2xl md:text-3xl font-accent font-bold mb-3 md:mb-4 group-hover:text-blue-600 transition-colors font-body">The Author</h3>
+                  <p className="text-5xl md:text-6xl font-accent font-bold mb-6 md:mb-8 font-body">₹299</p>
+                  <button 
+                    onClick={handleComingSoon}
+                    className="w-full py-3 md:py-4 bg-black text-white font-bold text-lg md:text-xl hover:bg-yellow-400 hover:text-black transition-all"
+                  >
+                    Get Now
                   </button>
                 </div>
               </div>
             </section>
-            
-            <div className="md:hidden pt-8">
-              <button 
-                onClick={onLogout}
-                className="w-full flex items-center justify-center gap-3 p-4 bg-red-500/5 hover:bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 font-medium transition-all"
-              >
-                <LogOut className="w-5 h-5" />
-                Sign Out Account
-              </button>
-            </div>
-          </div>
+          </motion.div>
         )}
       </div>
 
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-zinc-900/90 backdrop-blur-lg border-t border-zinc-800/50 flex items-center justify-around p-3 pb-safe z-40">
-        <button
-          onClick={() => setActiveTab('interviews')}
+      {/* Mobile Bottom Navigation */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-4 border-black flex items-center justify-around p-4 z-50">
+        <button 
+          onClick={() => setActiveTab('interviews')} 
           className={cn(
-            "flex flex-col items-center gap-1 p-2 rounded-lg transition-colors flex-1",
-            activeTab === 'interviews' ? "text-indigo-400" : "text-zinc-500 hover:text-zinc-300"
+            "flex flex-col items-center gap-1 font-accent text-2xl font-bold transition-transform active:scale-90", 
+            activeTab === 'interviews' ? "text-black" : "text-zinc-300"
           )}
         >
-          <Play className="w-5 h-5" />
-          <span className="text-[10px] font-medium">Sessions</span>
+          <div className={cn("w-2 h-2 rounded-full border border-black", activeTab === 'interviews' ? "bg-black" : "bg-transparent")} />
+          Log
         </button>
-        <button
-          onClick={() => setActiveTab('resume')}
+        <button 
+          onClick={() => setActiveTab('resume')} 
           className={cn(
-            "flex flex-col items-center gap-1 p-2 rounded-lg transition-colors flex-1",
-            activeTab === 'resume' ? "text-indigo-400" : "text-zinc-500 hover:text-zinc-300"
+            "flex flex-col items-center gap-1 font-accent text-2xl font-bold transition-transform active:scale-90", 
+            activeTab === 'resume' ? "text-black" : "text-zinc-300"
           )}
         >
-          <FileText className="w-5 h-5" />
-          <span className="text-[10px] font-medium">Resume</span>
+          <div className={cn("w-2 h-2 rounded-full border border-black", activeTab === 'resume' ? "bg-black" : "bg-transparent")} />
+          Brain
         </button>
-        <button
-          onClick={() => setActiveTab('profile')}
+        <button 
+          onClick={() => setActiveTab('profile')} 
           className={cn(
-            "flex flex-col items-center gap-1 p-2 rounded-lg transition-colors flex-1",
-            activeTab === 'profile' ? "text-indigo-400" : "text-zinc-500 hover:text-zinc-300"
+            "flex flex-col items-center gap-1 font-accent text-2xl font-bold transition-transform active:scale-90", 
+            activeTab === 'profile' ? "text-black" : "text-zinc-300"
           )}
         >
-          <User className="w-5 h-5" />
-          <span className="text-[10px] font-medium">Profile</span>
+          <div className={cn("w-2 h-2 rounded-full border border-black", activeTab === 'profile' ? "bg-black" : "bg-transparent")} />
+          Me
         </button>
       </div>
     </div>

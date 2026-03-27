@@ -2,6 +2,22 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
 const getToken = () => localStorage.getItem('auth_token');
 
+export interface Resume {
+  id: string;
+  name: string;
+  text: string;
+  createdAt: string;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  credits: number;
+  plan: 'free' | 'basic' | 'premium';
+  resumes: Resume[];
+}
+
 export const api = {
   // Auth
   signup: async (data: any) => {

@@ -39,7 +39,11 @@ const userSchema = new mongoose.Schema({
   plan: { type: String, enum: ['free', 'basic', 'premium'], default: 'free' },
   lastInterviewDate: { type: Date, default: Date.now },
   interviewsToday: { type: Number, default: 0 },
-  resumeText: { type: String, default: '' },
+  resumes: [{
+    name: { type: String, required: true },
+    text: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now }
+  }],
   createdAt: { type: Date, default: Date.now }
 });
 

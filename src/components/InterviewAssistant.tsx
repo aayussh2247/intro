@@ -37,93 +37,82 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
 
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  useEffect(() => {
-    // Fetch user resume context
+    // Fetch user resume context (combined)
     const fetchContext = async () => {
       try {
         const userData = await api.getUser();
-        setResumeContext(userData.resumeText || '');
+        if (userData.resumes && userData.resumes.length > 0) {
+          const combined = userData.resumes.map((r: any) => `[Resume: ${r.name}]\n${r.text}`).join('\n\n---\n\n');
+          setResumeContext(combined);
+        } else {
+          setResumeContext(userData.resumeText || '');
+        }
       } catch (error) {
         console.error('Error fetching context:', error);
       }
     };
     fetchContext();
 
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  useEffect(() => {
     // Setup Speech Recognition
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = 'en-US';
+      if (!recognitionRef.current) {
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = true;
+        recognitionRef.current.interimResults = true;
+        recognitionRef.current.lang = 'en-US';
 
-      recognitionRef.current.onresult = (event: any) => {
-        let interimTranscript = '';
-        let finalTranscript = '';
+        recognitionRef.current.onresult = (event: any) => {
+          let interimTranscript = '';
+          let finalTranscript = '';
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
-          }
-        }
-
-        setCurrentTranscript(interimTranscript);
-
-        if (finalTranscript) {
-          transcriptBufferRef.current += ' ' + finalTranscript;
-          
-          // Reset silence timer
-          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-          
-          // If silence for 2 seconds, process the buffered transcript
-          silenceTimerRef.current = setTimeout(() => {
-            if (transcriptBufferRef.current.trim()) {
-              handleProcessQuestion(transcriptBufferRef.current.trim());
-              transcriptBufferRef.current = '';
-              setCurrentTranscript('');
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript;
+            } else {
+              interimTranscript += event.results[i][0].transcript;
             }
-          }, 2000);
-        }
-      };
-
-      recognitionRef.current.onerror = (event: any) => {
-        if (event.error === 'aborted') return;
-        console.error('Speech recognition error', event.error);
-        if (event.error === 'not-allowed') {
-          setIsListening(false);
-        }
-      };
-
-      recognitionRef.current.onend = () => {
-        // Auto-restart if still supposed to be listening
-        if (isListening) {
-          try {
-            recognitionRef.current.start();
-          } catch (e) {
-            console.error('Restart error', e);
           }
-        }
-      };
+
+          setCurrentTranscript(interimTranscript);
+
+          if (finalTranscript) {
+            transcriptBufferRef.current += ' ' + finalTranscript;
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = setTimeout(() => {
+              if (transcriptBufferRef.current.trim()) {
+                handleProcessQuestion(transcriptBufferRef.current.trim());
+                transcriptBufferRef.current = '';
+                setCurrentTranscript('');
+              }
+            }, 1200);
+          }
+        };
+
+        recognitionRef.current.onerror = (event: any) => {
+          if (event.error === 'aborted') return;
+          console.error('Speech recognition error', event.error);
+          if (event.error === 'not-allowed') setIsListening(false);
+        };
+
+        recognitionRef.current.onend = () => {
+          if (isListening) {
+            try {
+              recognitionRef.current.start();
+            } catch (e) {
+              console.error('Restart error', e);
+            }
+          }
+        };
+      }
     }
 
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     };
   }, [isListening]);
@@ -258,39 +247,31 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
   return (
     <Draggable nodeRef={nodeRef} handle=".drag-handle" bounds="parent" disabled={isFullScreen || isMobile}>
       <div ref={nodeRef} className={cn(
-        "fixed z-50 bg-zinc-900/80 backdrop-blur-2xl border border-zinc-700/50 shadow-2xl overflow-hidden flex flex-col transition-all duration-300",
-        isFullScreen || isMobile ? "!inset-0 !w-full !h-full !max-h-full !transform-none rounded-none" : 
-        isMinimized ? "w-72 h-16 rounded-2xl" : "w-[400px] h-[600px] max-h-[80vh] rounded-2xl"
-      )} style={isFullScreen || isMobile ? { top: 0, left: 0 } : { top: '20px', right: '20px' }}>
+        "fixed z-50 bg-white hand-drawn shadow-sketch overflow-hidden flex flex-col transition-all duration-300 font-body",
+        isFullScreen || isMobile ? "!inset-0 !w-full !h-full !max-h-full !transform-none" : 
+        isMinimized ? "w-80 h-20" : "w-[500px] h-[700px] max-h-[90vh]"
+      )} style={isFullScreen || isMobile ? { top: 0, left: 0 } : { top: '40px', right: '40px' }}>
         
         {/* Header (Draggable) */}
         <div className={cn(
-          "flex items-center justify-between p-3 bg-zinc-800/50 border-b border-zinc-700/50 select-none",
+          "flex items-center justify-between p-4 bg-white border-b-4 border-black select-none",
           !(isFullScreen || isMobile) && "drag-handle cursor-move"
         )}>
-          <div className="flex items-center gap-2">
-            <div className={cn("w-2 h-2 rounded-full", isListening ? "bg-red-500 animate-pulse" : "bg-zinc-500")} />
-            <span className="font-semibold text-sm text-zinc-200">INTRO AI</span>
-          </div>
-          <div className="flex items-center gap-1">
-            {!isMobile && (
-              <>
-                <button onClick={() => {
-                  setIsFullScreen(!isFullScreen);
-                  if (isMinimized) setIsMinimized(false);
-                }} className="p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/50 rounded-md transition-colors">
-                  {isFullScreen ? <Shrink className="w-4 h-4" /> : <Expand className="w-4 h-4" />}
-                </button>
-                <button onClick={() => {
-                  setIsMinimized(!isMinimized);
-                  if (isFullScreen) setIsFullScreen(false);
-                }} className="p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/50 rounded-md transition-colors">
-                  {isMinimized ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
-                </button>
-              </>
+          <div className="flex items-center gap-3">
+            <span className="font-accent text-3xl font-bold italic tracking-tight">
+              . <span className="marker px-2">INK</span> SESSION
+            </span>
+            {isListening && (
+              <span className="text-xs font-bold text-red-600 animate-pulse">[ LISTENING ]</span>
             )}
-            <button onClick={handleEndSession} className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-colors">
-              <X className="w-4 h-4" />
+          </div>
+          <div className="flex items-center gap-4">
+             <button 
+              onClick={handleEndSession} 
+              className="font-accent text-2xl font-bold hover:text-red-600"
+              title="Close"
+            >
+              [X]
             </button>
           </div>
         </div>
@@ -298,11 +279,10 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
         {/* Content */}
         {!isMinimized && (
           <>
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar paper-dots bg-white">
               {messages.length === 0 && !currentTranscript && (
-                <div className="h-full flex flex-col items-center justify-center text-zinc-500 text-center space-y-3">
-                  <Bot className="w-10 h-10 opacity-50" />
-                  <p className="text-sm">Click the microphone to start listening to the interview.</p>
+                <div className="h-full flex flex-col items-center justify-center text-zinc-300 text-center space-y-4">
+                  <p className="text-3xl font-accent">The sheet is clean.<br/>Start speaking to begin.</p>
                 </div>
               )}
 
@@ -310,34 +290,25 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
                 {messages.map((msg) => (
                   <motion.div
                     key={msg.id}
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
                     className={cn(
                       "flex flex-col max-w-[90%]",
                       msg.role === 'transcript' ? "items-start" : "items-end self-end ml-auto"
                     )}
                   >
-                    <span className="text-[10px] text-zinc-500 mb-1 px-1 uppercase tracking-wider font-medium">
-                      {msg.role === 'transcript' ? 'Heard' : 'Say This'}
+                    <span className="text-xs font-bold uppercase tracking-widest mb-2 px-1">
+                      {msg.role === 'transcript' ? 'Heard:' : 'Scribe Suggests:'}
                     </span>
                     <div className={cn(
-                      "p-3 rounded-2xl text-sm relative group",
+                      "p-3 text-lg hand-drawn",
                       msg.role === 'transcript' 
-                        ? "bg-zinc-800/80 text-zinc-200 rounded-tl-sm border border-zinc-700/50" 
-                        : "bg-indigo-500/20 text-indigo-100 rounded-tr-sm border border-indigo-500/30"
+                        ? "bg-white rotate-0.5" 
+                        : "bg-yellow-100 shadow-sketch -rotate-0.5 font-semibold"
                     )}>
-                      <div className="whitespace-pre-wrap font-sans leading-relaxed">
+                      <div className="whitespace-pre-wrap leading-tight">
                         {msg.content}
                       </div>
-                      
-                      {msg.role === 'assistant' && (
-                        <button
-                          onClick={() => handleCopy(msg.id, msg.content)}
-                          className="absolute -left-8 top-2 p-1.5 text-zinc-400 hover:text-zinc-100 bg-zinc-800 rounded-md opacity-0 group-hover:opacity-100 transition-all border border-zinc-700"
-                        >
-                          {copiedId === msg.id ? <CheckCircle2 className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        </button>
-                      )}
                     </div>
                   </motion.div>
                 ))}
@@ -349,54 +320,42 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
                   animate={{ opacity: 1 }}
                   className="flex flex-col items-start max-w-[90%]"
                 >
-                  <span className="text-[10px] text-zinc-500 mb-1 px-1 uppercase tracking-wider font-medium">Listening...</span>
-                  <div className="p-3 bg-zinc-800/40 text-zinc-400 rounded-2xl rounded-tl-sm border border-zinc-700/30 text-sm italic">
-                    {currentTranscript}
+                  <div className="p-4 bg-white border-4 border-black border-dashed text-zinc-400 text-xl italic rotate-1">
+                    "{currentTranscript}..."
                   </div>
                 </motion.div>
               )}
 
               {isProcessing && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex flex-col items-end self-end ml-auto max-w-[90%]"
-                >
-                  <div className="p-3 bg-indigo-500/10 rounded-2xl rounded-tr-sm border border-indigo-500/20 flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </div>
-                </motion.div>
+                <div className="flex items-center gap-2 p-4">
+                  <span className="font-accent text-xl italic text-zinc-400">Scribing...</span>
+                </div>
               )}
               <div ref={messagesEndRef} />
             </div>
 
             {/* Footer Controls */}
-            <div className="p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-zinc-800/30 border-t border-zinc-700/50 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={toggleListening}
-                  className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                    isListening 
-                      ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30" 
-                      : "bg-indigo-500 text-white hover:bg-indigo-600 shadow-lg shadow-indigo-500/20"
-                  )}
-                >
-                  {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                  {isListening ? 'Stop' : 'Listen'}
-                </button>
-              </div>
+            <div className="p-4 bg-white border-t-4 border-black flex items-center justify-between">
+              <button
+                onClick={toggleListening}
+                className={cn(
+                  "px-10 py-4 font-accent text-3xl font-bold transition-all relative",
+                  isListening 
+                    ? "bg-red-600 text-white shadow-sketch -rotate-1" 
+                    : "bg-black text-white hover:shadow-sketch rotate-1"
+                )}
+              >
+                {isListening ? '[ STOP INK ]' : '[ START INK ]'}
+              </button>
               
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-6">
                 {messages.length > 0 && (
                   <button
                     onClick={exportPDF}
-                    className="p-2 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/50 rounded-lg transition-colors"
-                    title="Export PDF"
+                    className="font-accent text-2xl font-bold hover:underline"
+                    title="Export Sketch"
                   >
-                    <FileText className="w-4 h-4" />
+                    Export
                   </button>
                 )}
               </div>

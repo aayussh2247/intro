@@ -37,77 +37,65 @@ const Auth: React.FC<AuthProps> = ({ onSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0b] p-4 relative overflow-hidden">
-      {/* Background Orbs */}
-      <div className="absolute top-0 -left-48 w-96 h-96 bg-blue-600/20 rounded-full blur-[128px]" />
-      <div className="absolute bottom-0 -right-48 w-96 h-96 bg-purple-600/20 rounded-full blur-[128px]" />
-
-      <div className="w-full max-w-md relative">
+    <div className="min-h-screen flex items-center justify-center paper-dots p-6 font-body selection:bg-yellow-300">
+      <div className="w-full max-w-lg relative">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center p-3 bg-blue-500/10 rounded-2xl border border-blue-500/20 mb-4">
-            <User className="w-8 h-8 text-blue-400" />
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-2">
-            {isLogin ? 'Welcome Back' : 'Get Started Free'}
+        <div className="text-center mb-10">
+          <h1 className="text-5xl font-accent font-bold text-black mb-4">
+            {isLogin ? (
+              <>Welcome <span className="marker text-4xl">Back</span></>
+            ) : (
+              <>Start for <span className="marker text-4xl">Free</span></>
+            )}
           </h1>
-          <p className="text-gray-400">
-            {isLogin ? 'Sign in to continue your interview prep' : 'Create an account and get 3 free interviews'}
+          <p className="text-zinc-600 text-xl font-body italic underline decoration-yellow-400 underline-offset-4">
+            {isLogin ? 'Sign in to your practice notebook.' : 'Create an account & get 3 free sessions!'}
           </p>
         </div>
 
         {/* Card */}
-        <div className="bg-[#121214] border border-white/10 rounded-3xl p-8 shadow-2xl backdrop-blur-xl">
-          <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-white hand-drawn shadow-sketch p-10">
+          <form onSubmit={handleSubmit} className="space-y-10">
             {!isLogin && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300">Name</label>
-                <div className="relative group">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-focus-within:text-blue-400 transition-colors" />
-                  <input
-                    type="text"
-                    required
-                    className="w-full bg-[#1a1a1c] border border-white/5 rounded-2xl py-3 pl-12 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/50 transition-all"
-                    placeholder="Enter your name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  />
-                </div>
+              <div className="space-y-2 group">
+                <label className="text-sm font-bold uppercase tracking-widest text-black">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full bg-transparent border-b-2 border-black py-2 text-xl font-bold focus:outline-none focus:border-yellow-500 transition-colors"
+                  placeholder="e.g. Alex Graham"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
               </div>
             )}
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-300">Email</label>
-              <div className="relative group">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-focus-within:text-blue-400 transition-colors" />
-                <input
-                  type="email"
-                  required
-                  className="w-full bg-[#1a1a1c] border border-white/5 rounded-2xl py-3 pl-12 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/50 transition-all"
-                  placeholder="name@company.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                />
-              </div>
+            <div className="space-y-2 group">
+              <label className="text-sm font-bold uppercase tracking-widest text-black">Email Address</label>
+              <input
+                type="email"
+                required
+                className="w-full bg-transparent border-b-2 border-black py-2 text-xl font-bold focus:outline-none focus:border-yellow-500 transition-colors"
+                placeholder="name@email.com"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-300">Password</label>
-              <div className="relative group">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-focus-within:text-blue-400 transition-colors" />
-                <input
-                  type="password"
-                  required
-                  className="w-full bg-[#1a1a1c] border border-white/5 rounded-2xl py-3 pl-12 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/50 transition-all"
-                  placeholder="••••••••"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                />
-              </div>
+            <div className="space-y-2 group">
+              <label className="text-sm font-bold uppercase tracking-widest text-black">Notebook Password</label>
+              <input
+                type="password"
+                required
+                className="w-full bg-transparent border-b-2 border-black py-2 text-xl font-bold focus:outline-none focus:border-yellow-500 transition-colors"
+                placeholder="••••••••"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              />
             </div>
 
             {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm text-center">
+              <div className="p-4 border-2 border-black text-red-600 text-lg font-bold text-center bg-red-50 -rotate-1">
                 {error}
               </div>
             )}
@@ -115,14 +103,14 @@ const Auth: React.FC<AuthProps> = ({ onSuccess }) => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-2xl transition-all flex items-center justify-center gap-2 group shadow-lg shadow-blue-600/20 disabled:opacity-50"
+              className="w-full bg-black text-white font-bold text-2xl py-4 hover:shadow-sketch active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-3"
             >
               {loading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Loader2 className="w-7 h-7 animate-spin text-white" />
               ) : (
                 <>
-                  {isLogin ? 'Sign In' : 'Create Account'}
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  {isLogin ? 'Open Notebook' : 'Join Practice'}
+                  <ArrowRight className="w-6 h-6" />
                 </>
               )}
             </button>
@@ -130,9 +118,9 @@ const Auth: React.FC<AuthProps> = ({ onSuccess }) => {
 
           <button
             onClick={() => setIsLogin(!isLogin)}
-            className="w-full mt-6 text-gray-400 text-sm hover:text-white transition-colors"
+            className="w-full mt-10 text-zinc-500 font-bold hover:text-black transition-colors"
           >
-            {isLogin ? "Don't have an account? Signup" : "Already have an account? Signin"}
+            {isLogin ? "New here? Create your notebook" : "Already have one? Sign in"}
           </button>
         </div>
       </div>
