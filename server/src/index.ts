@@ -390,20 +390,21 @@ app.post('/api/ai/generate', authenticate(), async (req: any, res: Response) => 
         return res.status(401).json({ error: 'Identity matrix unreadable. Please re-sign.' });
     }
 
+    // Use User's own key if available
+    const userKey = user?.apiKeys?.[provider];
+
     // Check & Initialize Fuel for existing users
     if (user.fuel === undefined || user.fuel === null) {
         user.fuel = 100;
         await user.save();
     }
     
-    if (user.fuel <= 0 && user.plan !== 'premium') {
-      return res.status(403).json({ error: 'Out of Fuel! Please add more in your profile.' });
+    // Only block if NO user key AND no fuel
+    if (!userKey && user.fuel <= 0 && user.plan !== 'premium') {
+      return res.status(403).json({ error: 'Out of Fuel! Please add more or provide your own API key in Profile.' });
     }
 
     console.log(`[AI] Generating with ${provider} for ${user.email}`);
-
-    // Use User's own key if available
-    const userKey = user?.apiKeys?.[provider];
 
     if (provider === 'claude' || provider === 'anthropic') {
       const anthropicClient = userKey 
@@ -446,6 +447,8 @@ app.post('/api/ai/generate', authenticate(), async (req: any, res: Response) => 
         return res.status(500).json({ error: 'Gemini API not configured.' });
       }
 
+      let lastError: any;
+
       for (const client of geminiClients) {
         try {
           const result = await (client as any).models.generateContent({
@@ -463,8 +466,8 @@ app.post('/api/ai/generate', authenticate(), async (req: any, res: Response) => 
       if (!text && lastError) throw lastError;
     }
     
-    // Decrease Fuel
-    if (user) {
+    // Decrease Fuel (Only if using platform keys)
+    if (user && !userKey) {
       user.fuel = Math.max(0, (user.fuel || 0) - 1); // 1 Fuel per turn
       await user.save();
     }
@@ -498,6 +501,8 @@ app.post('/api/ai/summarize', authenticate(), async (req: any, res: Response) =>
       if (geminiClients.length === 0) {
         return res.status(500).json({ error: 'GEMINI_API_KEY is not configured.' });
       }
+
+      let lastError: any;
 
       for (const client of geminiClients) {
         try {
