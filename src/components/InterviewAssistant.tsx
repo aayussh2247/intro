@@ -420,63 +420,62 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
             </div>
 
             {/* Footer Commands */}
-            <div className="p-4 bg-zinc-900 border-t-4 border-black space-y-4 shrink-0">
-               <div className="flex justify-center">
-                  <span className="text-[10px] font-black tracking-[0.3em] text-zinc-500 uppercase">--- SESSION COMMANDS ---</span>
-               </div>
-               
-               <div className="flex items-center justify-between gap-3">
-                {/* 1. START/STOP (MASSIVE RED) */}
+            <div className="p-3 bg-zinc-900 border-t-4 border-black shrink-0">
+               {/* 3 Buttons Row */}
+               <div className="flex items-stretch gap-2 mb-2">
+                {/* START/STOP */}
                 <button
                   onClick={toggleListening}
                   className={cn(
-                    "flex-1 py-8 font-accent text-5xl font-bold transition-all flex items-center justify-center gap-3 border-4 border-black shadow-sketch active:translate-y-1",
+                    "flex-1 py-3 md:py-5 font-accent text-xl md:text-3xl font-bold transition-all flex items-center justify-center gap-2 border-2 border-white/20 rounded-lg active:scale-95",
                     isListening 
-                      ? "bg-red-700 text-white animate-pulse" 
-                      : "bg-red-500 text-white hover:bg-red-600"
+                      ? "bg-red-600 text-white" 
+                      : "bg-red-500 text-white"
                   )}
                 >
-                  {isListening ? <MicOff size={40}/> : <Mic size={40}/>}
-                  <span>{isListening ? 'STOP' : 'START'}</span>
+                  {isListening ? <MicOff size={22}/> : <Mic size={22}/>}
+                  {isListening ? 'STOP' : 'START'}
                 </button>
 
-                {/* 2. MUTE (YELLOW) */}
+                {/* MUTE/UNMUTE */}
                 <button 
                   onClick={() => setIsMuted(!isMuted)} 
                   className={cn(
-                    "w-24 h-24 sm:w-32 sm:h-32 flex flex-col items-center justify-center border-4 border-black transition-all rotate-2 active:rotate-0",
-                    isMuted ? "bg-yellow-400 text-black shadow-sketch" : "bg-white text-zinc-400"
+                    "w-16 md:w-24 flex flex-col items-center justify-center border-2 rounded-lg transition-all active:scale-95",
+                    isMuted 
+                      ? "bg-yellow-400 text-black border-yellow-500" 
+                      : "bg-zinc-800 text-zinc-400 border-zinc-700"
                   )}
                 >
-                  {isMuted ? <VolumeX size={44} className="animate-bounce" /> : <Mic size={44}/>}
-                  <span className="text-[10px] font-black mt-2">{isMuted ? 'SILENT' : 'MUTE'}</span>
+                  {isMuted ? <VolumeX size={24}/> : <Volume2 size={24}/>}
+                  <span className="text-[9px] font-black mt-1">{isMuted ? 'UNMUTE' : 'MUTE'}</span>
                 </button>
                 
-                {/* 3. END (BLACK) */}
+                {/* END SESSION */}
                 <button
                   onClick={handleEndSession}
-                  className="w-24 h-24 sm:w-32 sm:h-32 bg-black text-white hover:bg-zinc-800 transition-all border-4 border-black flex flex-col items-center justify-center -rotate-2 shadow-sketch active:translate-x-1"
+                  className="w-16 md:w-24 bg-zinc-800 text-white hover:bg-red-600 transition-all border-2 border-zinc-700 rounded-lg flex flex-col items-center justify-center active:scale-95"
                 >
-                  <X size={44}/>
-                  <span className="text-[10px] font-black mt-2">END</span>
+                  <X size={24}/>
+                  <span className="text-[9px] font-black mt-1">END</span>
                 </button>
                </div>
 
-               {/* Manual Input Bar */}
-               <div className="flex gap-2 bg-zinc-800 p-2 rounded-sm border-2 border-zinc-700">
+               {/* Manual Input */}
+               <div className="flex gap-2">
                   <input 
                     value={manualInput}
                     onChange={(e) => setManualInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleManualSend()}
-                    placeholder="Type backup transcript..."
-                    className="flex-1 bg-transparent text-white p-2 font-bold text-xs outline-none placeholder:text-zinc-600"
+                    placeholder="Type question here..."
+                    className="flex-1 bg-zinc-800 text-white p-2 font-bold text-xs outline-none placeholder:text-zinc-600 border border-zinc-700 rounded"
                   />
                   <button 
                     onClick={handleManualSend}
                     disabled={!manualInput.trim() || isProcessing}
-                    className="bg-zinc-700 text-white p-2 rounded hover:bg-zinc-600 transition-all"
+                    className="bg-zinc-700 text-white px-3 rounded hover:bg-zinc-600 transition-all disabled:opacity-30"
                   >
-                    <Send size={16}/>
+                    <Send size={14}/>
                   </button>
                </div>
             </div>
