@@ -252,11 +252,22 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
         language: 'en'
       });
 
-      onClose();
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      
+      setTimeout(() => {
+        onClose();
+      }, 500);
     } catch (error: any) {
       console.error('Error saving session:', error);
-      alert(error.message || 'The paper was torn. (Save failed)');
-      onClose();
+      // Still close the session even if save fails
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setTimeout(() => {
+        onClose();
+      }, 500);
     }
   };
 
@@ -282,7 +293,7 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
   return (
       <div 
         ref={nodeRef} 
-        className="bg-white flex flex-col h-full w-full"
+        className="bg-white flex flex-col h-screen w-screen fixed inset-0 z-50"
       >
         {/* Header */}
         <div className="bg-black text-white p-3 flex items-center justify-between shrink-0">
@@ -389,44 +400,47 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
             </div>
 
             {/* Footer Commands */}
-            <div className="p-3 bg-zinc-900 border-t-4 border-black shrink-0">
+            <div className="p-3 md:p-4 bg-zinc-900 border-t-4 border-black shrink-0 z-50">
                {/* 3 Buttons Row */}
-               <div className="flex items-stretch gap-2 mb-2">
+               <div className="flex items-stretch gap-2 mb-3">
                 {/* START/STOP */}
                 <button
                   onClick={toggleListening}
+                  type="button"
                   className={cn(
-                    "flex-1 py-3 md:py-5 font-accent text-xl md:text-3xl font-bold transition-all flex items-center justify-center gap-2 border-2 border-white/20 rounded-lg active:scale-95",
+                    "flex-1 py-3 md:py-4 font-accent text-base md:text-2xl font-bold transition-all flex items-center justify-center gap-2 border-2 border-white/20 rounded-lg active:scale-95 cursor-pointer",
                     isListening 
-                      ? "bg-red-600 text-white" 
-                      : "bg-red-500 text-white"
+                      ? "bg-red-600 text-white hover:bg-red-700" 
+                      : "bg-red-500 text-white hover:bg-red-600"
                   )}
                 >
-                  {isListening ? <MicOff size={22}/> : <Mic size={22}/>}
-                  {isListening ? 'STOP' : 'START'}
+                  {isListening ? <MicOff size={20}/> : <Mic size={20}/>}
+                  <span className="hidden sm:inline">{isListening ? 'STOP' : 'START'}</span>
                 </button>
 
                 {/* MUTE/UNMUTE */}
                 <button 
-                  onClick={() => setIsMuted(!isMuted)} 
+                  onClick={() => setIsMuted(!isMuted)}
+                  type="button"
                   className={cn(
-                    "w-16 md:w-24 flex flex-col items-center justify-center border-2 rounded-lg transition-all active:scale-95",
+                    "py-3 md:py-4 px-3 md:px-4 flex flex-col items-center justify-center border-2 rounded-lg transition-all active:scale-95 cursor-pointer font-accent font-bold",
                     isMuted 
-                      ? "bg-yellow-400 text-black border-yellow-500" 
-                      : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                      ? "bg-yellow-400 text-black border-yellow-500 hover:bg-yellow-500" 
+                      : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700"
                   )}
                 >
-                  {isMuted ? <VolumeX size={24}/> : <Volume2 size={24}/>}
-                  <span className="text-[9px] font-black mt-1">{isMuted ? 'UNMUTE' : 'MUTE'}</span>
+                  {isMuted ? <VolumeX size={20}/> : <Volume2 size={20}/>}
+                  <span className="text-[8px] md:text-[9px] font-black mt-1">{isMuted ? 'UNMUTE' : 'MUTE'}</span>
                 </button>
                 
                 {/* END SESSION */}
                 <button
                   onClick={handleEndSession}
-                  className="w-16 md:w-24 bg-zinc-800 text-white hover:bg-red-600 transition-all border-2 border-zinc-700 rounded-lg flex flex-col items-center justify-center active:scale-95"
+                  type="button"
+                  className="py-3 md:py-4 px-3 md:px-4 bg-zinc-800 text-white hover:bg-red-600 transition-all border-2 border-zinc-700 rounded-lg flex flex-col items-center justify-center active:scale-95 cursor-pointer font-accent font-bold"
                 >
-                  <X size={24}/>
-                  <span className="text-[9px] font-black mt-1">END</span>
+                  <X size={20}/>
+                  <span className="text-[8px] md:text-[9px] font-black mt-1">END</span>
                 </button>
                </div>
 
@@ -441,8 +455,9 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
                   />
                   <button 
                     onClick={handleManualSend}
+                    type="button"
                     disabled={!manualInput.trim() || isProcessing}
-                    className="bg-zinc-700 text-white px-3 rounded hover:bg-zinc-600 transition-all disabled:opacity-30"
+                    className="bg-zinc-700 text-white px-3 rounded hover:bg-zinc-600 transition-all disabled:opacity-30 cursor-pointer"
                   >
                     <Send size={14}/>
                   </button>
