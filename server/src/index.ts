@@ -22,8 +22,11 @@ app.get('/', (req: Request, res: Response) => {
   res.send('INTRO AI Backend is Scribing! 🖊️');
 });
 
-// AI Setup
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+// AI Setup helper
+const getGeminiClients = () => {
+  const keys = (process.env.GEMINI_API_KEY || '').split(',').map(k => k.trim()).filter(Boolean);
+  return keys.map(apiKey => new GoogleGenAI({ apiKey }));
+};
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
 const AI_PROVIDER = process.env.AI_PROVIDER || 'gemini';
 const SYSTEM_INSTRUCTION = "You are a human candidate in an interview. Respond with the exact spoken words you would use. Keep it extremely short, simple, and conversational.";
@@ -254,16 +257,30 @@ app.post('/api/ai/generate', async (req: Request, res: Response) => {
       });
       text = (message.content[0] as any).text || '';
     } else {
-      if (!process.env.GEMINI_API_KEY) {
+      const geminiClients = getGeminiClients();
+      if (geminiClients.length === 0) {
         return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the server.' });
       }
-      const model = genAI.getGenerativeModel({ 
-        model: 'gemini-1.5-flash',
-        systemInstruction: SYSTEM_INSTRUCTION 
-      });
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      text = response.text().trim();
+
+      let lastError: any;
+      for (const client of geminiClients) {
+        try {
+          const result = await client.models.generateContent({
+            model: 'gemini-1.5-flash',
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            config: { systemInstruction: SYSTEM_INSTRUCTION }
+          });
+          text = (result.text || '').trim();
+          if (text) break; // Found success!
+        } catch (err) {
+          console.error('Gemini Key Fail, trying next...', (err as Error).message);
+          lastError = err;
+        }
+      }
+
+      if (!text && lastError) {
+        throw lastError;
+      }
     }
     
     res.json({ text });
@@ -288,13 +305,29 @@ app.post('/api/ai/summarize', async (req: Request, res: Response) => {
       });
       summary = (message.content[0] as any).text || '';
     } else {
-      if (!process.env.GEMINI_API_KEY) {
+      const geminiClients = getGeminiClients();
+      if (geminiClients.length === 0) {
         return res.status(500).json({ error: 'GEMINI_API_KEY is not configured.' });
       }
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      summary = response.text();
+
+      let lastError: any;
+      for (const client of geminiClients) {
+        try {
+          const result = await client.models.generateContent({
+            model: 'gemini-1.5-flash',
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+          });
+          summary = result.text || '';
+          if (summary) break;
+        } catch (err) {
+          console.error('Gemini Summarization Key Fail, trying next...', (err as Error).message);
+          lastError = err;
+        }
+      }
+
+      if (!summary && lastError) {
+        throw lastError;
+      }
     }
     res.json({ summary });
   } catch (err) {
@@ -305,7 +338,11 @@ app.post('/api/ai/summarize', async (req: Request, res: Response) => {
 
 app.get('/api/ai/models', async (req: Request, res: Response) => {
   try {
-    const response = await (genAI as any).models.list();
+    const clients = getGeminiClients();
+    if (clients.length === 0) {
+      return res.status(500).json({ error: 'GEMINI_API_KEY is not configured.' });
+    }
+    const response = await clients[0].models.list();
     res.json(response);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
