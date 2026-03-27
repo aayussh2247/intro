@@ -46,6 +46,14 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [provider, setProvider] = useState<'gemini' | 'claude' | 'openai' | 'kimi' | 'grok'>('gemini');
   const [fuel, setFuel] = useState<number>(100);
+
+  const isMutedRef = useRef(isMuted);
+  const isListeningRef = useRef(isListening);
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+    isListeningRef.current = isListening;
+  }, [isMuted, isListening]);
   
   const recognitionRef = useRef<any>(null);
   const transcriptBufferRef = useRef<string>('');
@@ -89,7 +97,7 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
         recognitionRef.current.lang = 'en-US';
 
         recognitionRef.current.onresult = (event: any) => {
-          if (isMuted) return;
+          if (isMutedRef.current) return;
 
           let interimTranscript = '';
           let finalTranscript = '';
@@ -113,7 +121,7 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
                 transcriptBufferRef.current = '';
                 setCurrentTranscript('');
               }
-            }, 1500);
+            }, 800); // Faster response
           }
         };
 
@@ -124,7 +132,7 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
         };
 
         recognitionRef.current.onend = () => {
-          if (isListening) {
+          if (isListeningRef.current) {
             try {
               recognitionRef.current.start();
             } catch (e) {
