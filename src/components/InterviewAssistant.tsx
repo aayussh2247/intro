@@ -477,13 +477,15 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
                 <button 
                   onClick={() => setIsMuted(!isMuted)} 
                   className={cn(
-                    "w-20 h-20 flex flex-col items-center justify-center border-4 border-black transition-all",
-                    isMuted ? "bg-yellow-400 text-black shadow-sketch rotate-3" : "bg-white text-zinc-400 hover:text-black"
+                    "w-24 h-24 flex flex-col items-center justify-center border-4 border-black transition-all group z-10",
+                    isMuted ? "bg-yellow-400 text-black shadow-sketch rotate-3" : "bg-white text-zinc-400 hover:text-black hover:border-blue-900"
                   )}
-                  title={isMuted ? "Audio Off" : "Audio On"}
+                  title={isMuted ? "Unmute Scribe" : "Mute Scribe"}
                 >
-                  {isMuted ? <VolumeX size={32}/> : <Volume2 size={32}/>}
-                  <span className="text-[8px] font-black mt-1 uppercase">Mute</span>
+                  {isMuted ? <VolumeX size={36} className="animate-bounce" /> : <Mic size={36}/>}
+                  <span className="text-[10px] font-black mt-2 uppercase tracking-tighter">
+                    {isMuted ? 'SILENCED' : 'LISTENING'}
+                  </span>
                 </button>
                 
                 <div className="flex flex-col gap-2 shrink-0">
