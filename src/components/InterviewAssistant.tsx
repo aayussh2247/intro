@@ -44,7 +44,7 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
   const [resumeContext, setResumeContext] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [provider, setProvider] = useState<'gemini' | 'claude' | 'openai' | 'kimi' | 'grok'>('claude');
+  const [provider, setProvider] = useState<'gemini' | 'claude' | 'openai' | 'kimi' | 'grok'>('gemini');
   const [fuel, setFuel] = useState<number>(100);
 
   const isMutedRef = useRef(isMuted);

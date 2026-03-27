@@ -3,7 +3,6 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
-import Anthropic from '@anthropic-ai/sdk';
 import nodemailer from 'nodemailer';
 import axios from 'axios';
 import bcrypt from 'bcryptjs';
@@ -418,7 +417,7 @@ app.delete('/api/interviews/:id', async (req: Request, res: Response) => {
 // AI Endpoints
 app.post('/api/ai/generate', authenticate(), async (req: any, res: Response) => {
   const { question, resumeContext, provider: incomingProvider } = req.body;
-  const provider = 'gemini'; // FORCED to gemini to fix any credit issues with other providers
+  const provider = (incomingProvider || AI_PROVIDER || 'gemini') as string;
   
   try {
     const prompt = `
@@ -456,67 +455,33 @@ app.post('/api/ai/generate', authenticate(), async (req: any, res: Response) => 
       return res.status(403).json({ error: 'Out of Fuel! Please add more or provide your own API key in Profile.' });
     }
 
-    console.log(`[AI] Generating with ${provider} for ${user.email}`);
+    console.log(`[AI] Generating with Gemini for ${user.email}`);
 
-    if (provider === 'claude' || provider === 'anthropic') {
-      const anthropicClient = userKey 
-        ? new Anthropic({ apiKey: userKey })
-        : anthropic;
+    // Gemini Implementation
+    const geminiClients = userKey 
+      ? [new GoogleGenAI({ apiKey: userKey })]
+      : getGeminiClients();
 
-      const message = await anthropicClient.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 150,
-        system: SYSTEM_INSTRUCTION,
-        messages: [{ role: 'user', content: prompt }],
-      });
-      text = (message.content[0] as any).text || '';
-    } else if (provider === 'openai' || provider === 'kimi' || provider === 'grok') {
-      // Logic for OpenAI compatible providers
-      const baseUrl = provider === 'kimi' ? 'https://api.moonshot.cn/v1' 
-                    : provider === 'grok' ? 'https://api.x.ai/v1'
-                    : 'https://api.openai.com/v1';
-      
-      const key = userKey || process.env.OPENAI_API_KEY;
-      if (!key) return res.status(400).json({ error: `API key for ${provider} not found.` });
-
-      const response = await axios.post(`${baseUrl}/chat/completions`, {
-        model: provider === 'kimi' ? 'moonshot-v1-8k' : provider === 'grok' ? 'grok-beta' : 'gpt-4o',
-        messages: [
-          { role: 'system', content: SYSTEM_INSTRUCTION },
-          { role: 'user', content: prompt }
-        ]
-      }, {
-        headers: { 'Authorization': `Bearer ${key}` }
-      });
-      text = response.data.choices[0].message.content;
-    } else {
-      // Gemini
-      const geminiClients = userKey 
-        ? [new GoogleGenAI({ apiKey: userKey })]
-        : getGeminiClients();
-
-      if (geminiClients.length === 0) {
-        return res.status(500).json({ error: 'Gemini API not configured.' });
-      }
-
-      let lastError: any;
-
-      for (const client of geminiClients) {
-        try {
-          const result = await (client as any).models.generateContent({
-            model: 'gemini-2.0-flash-lite',
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            system_instruction: SYSTEM_INSTRUCTION
-          });
-          text = (result.text || '').trim();
-          if (text) break;
-        } catch (err) {
-          lastError = err;
-          console.error('[Gemini Loop Error]', (err as Error).message);
-        }
-      }
-      if (!text && lastError) throw lastError;
+    if (geminiClients.length === 0) {
+      return res.status(500).json({ error: 'Gemini API not configured.' });
     }
+
+    let lastError: any;
+    for (const client of geminiClients) {
+      try {
+        const result = await (client as any).models.generateContent({
+          model: 'gemini-2.0-flash-lite',
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          system_instruction: SYSTEM_INSTRUCTION
+        });
+        text = (result.text || '').trim();
+        if (text) break;
+      } catch (err) {
+        lastError = err;
+        console.error('[Gemini Loop Error]', (err as Error).message);
+      }
+    }
+    if (!text && lastError) throw lastError;
     
     // Decrease Fuel (Only if using platform keys)
     if (user && !userKey) {
@@ -527,53 +492,38 @@ app.post('/api/ai/generate', authenticate(), async (req: any, res: Response) => 
     res.json({ text, fuel: user?.fuel });
   } catch (err) {
     console.error('AI ERROR [Generate]:', (err as Error).message);
-    if ((err as any).response) {
-      console.error('API Response Error:', (err as any).response.data);
-    }
     res.status(500).json({ error: 'AI Generation failed: ' + (err as Error).message });
   }
 });
 
 app.post('/api/ai/summarize', authenticate(), async (req: any, res: Response) => {
-  const { transcript, provider = AI_PROVIDER } = req.body;
+  const { transcript } = req.body;
   
   try {
     let summary = '';
     const prompt = `Summarize this interview session. Highlight key questions asked and areas for improvement.\n\nTranscript:\n${transcript}`;
 
-    if (provider === 'claude') {
-      const message = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }],
-      });
-      summary = (message.content[0] as any).text || '';
-    } else {
-      const geminiClients = getGeminiClients();
-      if (geminiClients.length === 0) {
-        return res.status(500).json({ error: 'GEMINI_API_KEY is not configured.' });
-      }
+    const geminiClients = getGeminiClients();
+    if (geminiClients.length === 0) {
+      return res.status(500).json({ error: 'GEMINI_API_KEY is not configured.' });
+    }
 
-      let lastError: any;
-
-      for (const client of geminiClients) {
-        try {
-          const result = await (client as any).models.generateContent({
-            model: 'gemini-2.0-flash-lite',
-            contents: [{ role: 'user', parts: [{ text: prompt }] }]
-          });
-          summary = (result.text || '').trim();
-          if (summary) break;
-        } catch (err) {
-          console.error('Gemini Summarization Key Fail, trying next...', (err as Error).message);
-          lastError = err;
-        }
-      }
-
-      if (!summary && lastError) {
-        throw lastError;
+    let lastError: any;
+    for (const client of geminiClients) {
+      try {
+        const result = await (client as any).models.generateContent({
+          model: 'gemini-2.0-flash-lite',
+          contents: [{ role: 'user', parts: [{ text: prompt }] }]
+        });
+        summary = (result.text || '').trim();
+        if (summary) break;
+      } catch (err) {
+        console.error('Gemini Summarization Key Fail, trying next...', (err as Error).message);
+        lastError = err;
       }
     }
+
+    if (!summary && lastError) throw lastError;
     res.json({ summary });
   } catch (err) {
     console.error('AI Summarization Error:', err);
