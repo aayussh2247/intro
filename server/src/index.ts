@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import Anthropic from '@anthropic-ai/sdk';
 import nodemailer from 'nodemailer';
 import axios from 'axios';
 import bcrypt from 'bcryptjs';
@@ -23,6 +24,8 @@ app.get('/', (req: Request, res: Response) => {
 
 // AI Setup
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
+const AI_PROVIDER = process.env.AI_PROVIDER || 'gemini';
 const SYSTEM_INSTRUCTION = "You are a human candidate in an interview. Respond with the exact spoken words you would use. Keep it extremely short, simple, and conversational.";
 
 // MongoDB Connection
@@ -224,12 +227,8 @@ app.delete('/api/interviews/:id', async (req: Request, res: Response) => {
 
 // AI Endpoints
 app.post('/api/ai/generate', async (req: Request, res: Response) => {
-  const { question, resumeContext } = req.body;
+  const { question, resumeContext, provider = AI_PROVIDER } = req.body;
   
-  if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the server.' });
-  }
-
   try {
     const prompt = `
       You are an AI interview copilot.
@@ -244,13 +243,28 @@ app.post('/api/ai/generate', async (req: Request, res: Response) => {
       4. Use simple human language.
     `;
 
-    const result = await genAI.models.generateContent({
-      model: 'models/gemini-2.5-flash',
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: { systemInstruction: SYSTEM_INSTRUCTION }
-    });
-    
-    const text = (result.text || '').trim();
+    let text = '';
+
+    if (provider === 'claude') {
+      const message = await anthropic.messages.create({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 150,
+        system: SYSTEM_INSTRUCTION,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      text = (message.content[0] as any).text || '';
+    } else {
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the server.' });
+      }
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-1.5-flash',
+        systemInstruction: SYSTEM_INSTRUCTION 
+      });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      text = response.text().trim();
+    }
     
     res.json({ text });
   } catch (err) {
@@ -260,19 +274,31 @@ app.post('/api/ai/generate', async (req: Request, res: Response) => {
 });
 
 app.post('/api/ai/summarize', async (req: Request, res: Response) => {
-  const { transcript } = req.body;
+  const { transcript, provider = AI_PROVIDER } = req.body;
   
-  if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY is not configured.' });
-  }
-
   try {
-    const result = await genAI.models.generateContent({
-      model: 'models/gemini-2.5-flash',
-      contents: [{ role: 'user', parts: [{ text: `Summarize this interview session. Highlight key questions asked and areas for improvement.\n\nTranscript:\n${transcript}` }] }]
-    });
-    res.json({ summary: result.text || '' });
+    let summary = '';
+    const prompt = `Summarize this interview session. Highlight key questions asked and areas for improvement.\n\nTranscript:\n${transcript}`;
+
+    if (provider === 'claude') {
+      const message = await anthropic.messages.create({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      summary = (message.content[0] as any).text || '';
+    } else {
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: 'GEMINI_API_KEY is not configured.' });
+      }
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      summary = response.text();
+    }
+    res.json({ summary });
   } catch (err) {
+    console.error('AI Summarization Error:', err);
     res.status(500).json({ error: 'Failed to summarize' });
   }
 });

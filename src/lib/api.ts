@@ -94,20 +94,20 @@ export const api = {
     if (!res.ok) throw new Error('Failed to delete interview');
     return res.json();
   },
-  generateAIResponse: async (question: string, resumeContext: string) => {
+  generateAIResponse: async (question: string, resumeContext: string, provider?: string) => {
     const res = await fetch(`${API_BASE_URL}/ai/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, resumeContext }),
+      body: JSON.stringify({ question, resumeContext, provider }),
     });
     if (!res.ok) throw new Error('AI Generation failed');
     return res.json();
   },
-  summarizeInterview: async (transcript: string) => {
+  summarizeInterview: async (transcript: string, provider?: string) => {
     const res = await fetch(`${API_BASE_URL}/ai/summarize`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcript }),
+      body: JSON.stringify({ transcript, provider }),
     });
     if (!res.ok) throw new Error('AI Summarization failed');
     return res.json();

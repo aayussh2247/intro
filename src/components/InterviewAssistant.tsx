@@ -23,6 +23,7 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
   const [resumeContext, setResumeContext] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [provider, setProvider] = useState<'gemini' | 'claude'>('claude');
   
   const recognitionRef = useRef<any>(null);
   const transcriptBufferRef = useRef<string>('');
@@ -155,7 +156,7 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
     setIsProcessing(true);
 
     try {
-      const { text: answerText } = await api.generateAIResponse(question, resumeContext);
+      const { text: answerText } = await api.generateAIResponse(question, resumeContext, provider);
 
       if (answerText === 'IGNORE' || answerText.startsWith('IGNORE')) {
         setIsProcessing(false);
@@ -198,7 +199,7 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
     try {
       // Generate summary via backend
       const transcriptText = messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
-      const { summary } = await api.summarizeInterview(transcriptText);
+      const { summary } = await api.summarizeInterview(transcriptText, provider);
 
       // Save to our new backend API
       await api.createInterview({
@@ -264,6 +265,17 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
             {isListening && (
               <span className="text-xs font-bold text-red-600 animate-pulse">[ LISTENING ]</span>
             )}
+            <div className="flex items-center gap-2 ml-4 border-2 border-black px-2 py-1 rotate-1 bg-zinc-50">
+              <span className="text-[10px] font-bold uppercase">Provider:</span>
+              <select 
+                value={provider} 
+                onChange={(e) => setProvider(e.target.value as any)}
+                className="text-xs font-bold bg-transparent border-none outline-none cursor-pointer uppercase"
+              >
+                <option value="gemini">Gemini</option>
+                <option value="claude">Claude</option>
+              </select>
+            </div>
           </div>
           <div className="flex items-center gap-4">
              <button 

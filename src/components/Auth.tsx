@@ -40,22 +40,22 @@ const Auth: React.FC<AuthProps> = ({ onSuccess }) => {
     <div className="min-h-screen flex items-center justify-center paper-dots p-6 font-body selection:bg-yellow-300">
       <div className="w-full max-w-lg relative">
         {/* Header */}
-        <div className="text-center mb-10">
-          <h1 className="text-5xl font-accent font-bold text-black mb-4">
+        <div className="text-center mb-8 sm:mb-10">
+          <h1 className="text-4xl sm:text-5xl font-accent font-bold text-black mb-3">
             {isLogin ? (
-              <>Welcome <span className="marker text-4xl">Back</span></>
+              <>Welcome <span className="marker text-3xl sm:text-4xl">Back</span></>
             ) : (
-              <>Start for <span className="marker text-4xl">Free</span></>
+              <>Start for <span className="marker text-3xl sm:text-4xl">Free</span></>
             )}
           </h1>
-          <p className="text-zinc-600 text-xl font-body italic underline decoration-yellow-400 underline-offset-4">
+          <p className="text-zinc-600 text-lg sm:text-xl font-body italic underline decoration-yellow-400 underline-offset-4 px-4">
             {isLogin ? 'Sign in to your practice notebook.' : 'Create an account & get 3 free sessions!'}
           </p>
         </div>
 
         {/* Card */}
-        <div className="bg-white hand-drawn shadow-sketch p-10">
-          <form onSubmit={handleSubmit} className="space-y-10">
+        <div className="bg-white hand-drawn shadow-sketch p-6 sm:p-10">
+          <form onSubmit={handleSubmit} className="space-y-8">
             {!isLogin && (
               <div className="space-y-2 group">
                 <label className="text-sm font-bold uppercase tracking-widest text-black">Full Name</label>
