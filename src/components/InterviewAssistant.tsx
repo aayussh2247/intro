@@ -121,7 +121,7 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
                 transcriptBufferRef.current = '';
                 setCurrentTranscript('');
               }
-            }, 800); // Faster response
+            }, 600); // Instant processing
           }
         };
 

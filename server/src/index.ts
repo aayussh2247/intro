@@ -30,7 +30,7 @@ const getGeminiClients = () => {
 };
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
 const AI_PROVIDER = process.env.AI_PROVIDER || 'gemini';
-const SYSTEM_INSTRUCTION = "You are a top-tier professional candidate. Deliver precise, high-impact, and spoken-style responses. Avoid filler words. Keep answers focused on value and technical competence. One or two sentences maximum.";
+const SYSTEM_INSTRUCTION = "You are a professional candidate. Answer instantly in ONE short sentence. Be conversational but concise. Use spoken human language.";
 
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://user:pass@cluster0.mongodb.net/intro-ai?retryWrites=true&w=majority';
