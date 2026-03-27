@@ -1,4 +1,5 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://intro-ai-backend.onrender.com/api';
+const rawApiUrl = import.meta.env.VITE_API_URL || 'https://intro-ai-backend.onrender.com';
+const API_BASE_URL = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`;
 
 // Debug logging for API configuration
 if (typeof window !== 'undefined') {
