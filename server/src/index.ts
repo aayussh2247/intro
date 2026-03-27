@@ -47,7 +47,15 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   name: { type: String, required: true },
   credits: { type: Number, default: 3 }, // Free tier: 3 interviews
+  fuel: { type: Number, default: 100 }, // 100 energy units
   plan: { type: String, enum: ['free', 'basic', 'premium'], default: 'free' },
+  apiKeys: {
+    gemini: String,
+    openai: String,
+    anthropic: String,
+    kimi: String,
+    grok: String
+  },
   lastInterviewDate: { type: Date, default: Date.now },
   interviewsToday: { type: Number, default: 0 },
   resumes: [{
@@ -55,6 +63,8 @@ const userSchema = new mongoose.Schema({
     text: { type: String, required: true },
     createdAt: { type: Date, default: Date.now }
   }],
+  resetPasswordToken: String,
+  resetPasswordExpires: Date,
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -74,6 +84,15 @@ const interviewSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 const Interview = mongoose.model('Interview', interviewSchema);
 
+// Transporter Setup
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
 // Auth Routes
 app.post('/api/auth/signup', async (req: Request, res: Response) => {
   try {
@@ -84,6 +103,16 @@ app.post('/api/auth/signup', async (req: Request, res: Response) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({ email, password: hashedPassword, name, credits: 3 });
     
+    // Welcome Email
+    if (process.env.EMAIL_USER) {
+      transporter.sendMail({
+        from: `INTRO AI <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: 'Welcome to INTRO AI! 🖋️',
+        text: `Hello ${name},\n\nWelcome to INTRO AI! Your account has been created successfully.\n\nYou have 3 free interview credits to get started.\n\nHappy Interviewing!`
+      }).catch(err => console.error('Welcome email error:', err));
+    }
+
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
     res.json({ token, user: { id: user._id, name: user.name, email: user.email, credits: user.credits } });
   } catch (err) {
@@ -100,8 +129,80 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(400).json({ error: 'Invalid password' });
 
+    // Login Alert
+    if (process.env.EMAIL_USER) {
+      transporter.sendMail({
+        from: `INTRO AI <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: 'Login Alert: New sign-in to INTRO AI',
+        text: `Hello ${user.name},\n\nA new login was detected for your INTRO AI account at ${new Date().toLocaleString()}.\n\nIf this was not you, please secure your account immediately.`
+      }).catch(err => console.error('Login email error:', err));
+    }
+
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
     res.json({ token, user: { id: user._id, name: user.name, email: user.email, credits: user.credits, plan: user.plan } });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const crypto = require('crypto');
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetExpires = new Date(Date.now() + 3600000); // 1 hour
+
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = resetExpires;
+    await user.save();
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://intro-ai.vercel.app';
+    const resetLink = `${frontendUrl}/reset-password/${resetToken}`;
+
+    if (process.env.EMAIL_USER) {
+      await transporter.sendMail({
+        from: `INTRO AI <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: 'Password Reset Request - INTRO AI',
+        text: `Hello ${user.name},\n\nYou requested to reset your password. Click the link below to set a new one:\n\n${resetLink}\n\nThis link will expire in 1 hour.`
+      });
+    }
+
+    res.json({ message: 'Reset email sent' });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { token, newPassword } = req.body;
+    const user = await User.findOne({ 
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!user) return res.status(400).json({ error: 'Invalid or expired token' });
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    if (process.env.EMAIL_USER) {
+      transporter.sendMail({
+        from: `INTRO AI <${process.env.EMAIL_USER}>`,
+        to: user.email,
+        subject: 'Password Changed Successfully',
+        text: `Hello ${user.name},\n\nYour INTRO AI password has been updated successfully.\n\nIf you did not make this change, please contact support immediately.`
+      }).catch(err => console.error('Reset success email error:', err));
+    }
+
+    res.json({ message: 'Password reset successful' });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
@@ -122,7 +223,7 @@ const authenticate = async (req: any, res: any, next: any) => {
   }
 };
 
-// User Profile
+// User Profile & Keys
 app.get('/api/user', authenticate, async (req: any, res: Response) => {
   res.json(req.user);
 });
@@ -133,6 +234,27 @@ app.put('/api/user', authenticate, async (req: any, res: Response) => {
     res.json(user);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/user/verify-key', authenticate, async (req: any, res: Response) => {
+  const { provider, key } = req.body;
+  try {
+    if (provider === 'gemini') {
+      const client = new GoogleGenAI({ apiKey: key });
+      await client.models.generateContent({ model: 'gemini-1.5-flash', contents: 'Hi' });
+    } else if (provider === 'anthropic') {
+      const client = new Anthropic({ apiKey: key });
+      await client.messages.create({ model: 'claude-3-haiku-20240307', max_tokens: 1, messages: [{ role: 'user', content: 'Hi' }] });
+    } else if (provider === 'openai' || provider === 'kimi' || provider === 'grok') {
+      const baseUrl = provider === 'kimi' ? 'https://api.moonshot.cn/v1' 
+                    : provider === 'grok' ? 'https://api.x.ai/v1'
+                    : 'https://api.openai.com/v1';
+      await axios.get(`${baseUrl}/models`, { headers: { 'Authorization': `Bearer ${key}` } });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: 'Invalid API Key for ' + provider });
   }
 });
 
@@ -173,17 +295,9 @@ app.post('/api/interviews', authenticate, async (req: any, res: Response) => {
     const interview = await Interview.create({ ...req.body, userId: user._id });
     
     // Trigger Email Notification (Direct)
-    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS
-        }
-      });
-
+    if (process.env.EMAIL_USER) {
       const mailOptions = {
-        from: process.env.EMAIL_USER,
+        from: `INTRO AI Success <${process.env.EMAIL_USER}>`,
         to: user.email, // Notify user
         subject: `Interview Success: ${interview.title}`,
         text: `Hello ${user.name},\n\nYour interview session "${interview.title}" has been saved successfully.\n\nSummary:\n${interview.summary}\n\nYou have ${user.credits} interviews left.\n\nTranscript is available in your dashboard.`
@@ -229,7 +343,7 @@ app.delete('/api/interviews/:id', async (req: Request, res: Response) => {
 });
 
 // AI Endpoints
-app.post('/api/ai/generate', async (req: Request, res: Response) => {
+app.post('/api/ai/generate', authenticate, async (req: any, res: Response) => {
   const { question, resumeContext, provider = AI_PROVIDER } = req.body;
   
   try {
@@ -247,19 +361,50 @@ app.post('/api/ai/generate', async (req: Request, res: Response) => {
     `;
 
     let text = '';
+    const user = (req as any).user;
 
-    if (provider === 'claude') {
-      const message = await anthropic.messages.create({
+    // Use User's own key if available
+    const userKey = user?.apiKeys?.[provider];
+
+    if (provider === 'claude' || provider === 'anthropic') {
+      const anthropicClient = userKey 
+        ? new Anthropic({ apiKey: userKey })
+        : anthropic;
+
+      const message = await anthropicClient.messages.create({
         model: 'claude-3-5-sonnet-20241022',
         max_tokens: 150,
         system: SYSTEM_INSTRUCTION,
         messages: [{ role: 'user', content: prompt }],
       });
       text = (message.content[0] as any).text || '';
+    } else if (provider === 'openai' || provider === 'kimi' || provider === 'grok') {
+      // Logic for OpenAI compatible providers
+      const baseUrl = provider === 'kimi' ? 'https://api.moonshot.cn/v1' 
+                    : provider === 'grok' ? 'https://api.x.ai/v1'
+                    : 'https://api.openai.com/v1';
+      
+      const key = userKey || process.env.OPENAI_API_KEY;
+      if (!key) return res.status(400).json({ error: `API key for ${provider} not found.` });
+
+      const response = await axios.post(`${baseUrl}/chat/completions`, {
+        model: provider === 'kimi' ? 'moonshot-v1-8k' : provider === 'grok' ? 'grok-beta' : 'gpt-4o',
+        messages: [
+          { role: 'system', content: SYSTEM_INSTRUCTION },
+          { role: 'user', content: prompt }
+        ]
+      }, {
+        headers: { 'Authorization': `Bearer ${key}` }
+      });
+      text = response.data.choices[0].message.content;
     } else {
-      const geminiClients = getGeminiClients();
+      // Gemini
+      const geminiClients = userKey 
+        ? [new GoogleGenAI({ apiKey: userKey })]
+        : getGeminiClients();
+
       if (geminiClients.length === 0) {
-        return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the server.' });
+        return res.status(500).json({ error: 'Gemini API not configured.' });
       }
 
       let lastError: any;
@@ -271,26 +416,28 @@ app.post('/api/ai/generate', async (req: Request, res: Response) => {
             config: { systemInstruction: SYSTEM_INSTRUCTION }
           });
           text = (result.text || '').trim();
-          if (text) break; // Found success!
+          if (text) break;
         } catch (err) {
-          console.error('Gemini Key Fail, trying next...', (err as Error).message);
           lastError = err;
         }
       }
-
-      if (!text && lastError) {
-        throw lastError;
-      }
+      if (!text && lastError) throw lastError;
     }
     
-    res.json({ text });
+    // Decrease Fuel
+    if (user) {
+      user.fuel = Math.max(0, (user.fuel || 0) - 1); // 1 Fuel per turn
+      await user.save();
+    }
+
+    res.json({ text, fuel: user?.fuel });
   } catch (err) {
     console.error('AI Generation Error:', err);
     res.status(500).json({ error: 'Failed to generate AI response' });
   }
 });
 
-app.post('/api/ai/summarize', async (req: Request, res: Response) => {
+app.post('/api/ai/summarize', authenticate, async (req: any, res: Response) => {
   const { transcript, provider = AI_PROVIDER } = req.body;
   
   try {

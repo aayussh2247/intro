@@ -14,8 +14,16 @@ export interface User {
   name: string;
   email: string;
   credits: number;
+  fuel: number;
   plan: 'free' | 'basic' | 'premium';
   resumes: Resume[];
+  apiKeys?: {
+    gemini?: string;
+    openai?: string;
+    anthropic?: string;
+    kimi?: string;
+    grok?: string;
+  };
 }
 
 export const api = {
@@ -42,6 +50,22 @@ export const api = {
       const error = await res.json();
       throw new Error(error.error || 'Login failed');
     }
+    return res.json();
+  },
+  forgotPassword: async (email: string) => {
+    const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    return res.json();
+  },
+  resetPassword: async (data: any) => {
+    const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
     return res.json();
   },
 
@@ -97,7 +121,10 @@ export const api = {
   generateAIResponse: async (question: string, resumeContext: string, provider?: string) => {
     const res = await fetch(`${API_BASE_URL}/ai/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}` 
+      },
       body: JSON.stringify({ question, resumeContext, provider }),
     });
     if (!res.ok) throw new Error('AI Generation failed');
@@ -106,10 +133,24 @@ export const api = {
   summarizeInterview: async (transcript: string, provider?: string) => {
     const res = await fetch(`${API_BASE_URL}/ai/summarize`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`
+      },
       body: JSON.stringify({ transcript, provider }),
     });
     if (!res.ok) throw new Error('AI Summarization failed');
+    return res.json();
+  },
+  verifyKey: async (provider: string, key: string) => {
+    const res = await fetch(`${API_BASE_URL}/user/verify-key`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}` 
+      },
+      body: JSON.stringify({ provider, key }),
+    });
     return res.json();
   },
 };
