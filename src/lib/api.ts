@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : 'https://intro-ai-backend.onrender.com/api');
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://intro-ai-backend.onrender.com/api';
 
 // Debug logging for API configuration
 if (typeof window !== 'undefined') {
