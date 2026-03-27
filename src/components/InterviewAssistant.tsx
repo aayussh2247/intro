@@ -457,35 +457,47 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
                   </button>
                </div>
 
-               <div className="flex items-center justify-between">
+               <div className="flex items-center justify-between gap-4">
                 <button
                   onClick={toggleListening}
                   className={cn(
-                    "flex-1 mr-4 py-4 font-accent text-3xl font-bold transition-all flex items-center justify-center gap-4 border-4 border-black",
+                    "flex-1 py-4 font-accent text-3xl font-bold transition-all flex items-center justify-center gap-4 border-4 border-black",
                     isListening 
                       ? "bg-red-600 text-white shadow-sketch -rotate-1" 
                       : "bg-white text-black hover:shadow-sketch rotate-1"
                   )}
                 >
                   {isListening ? (
-                    <><MicOff size={28}/> [ CUT THE FEED ]</>
+                    <><MicOff size={28}/> [ CUT ]</>
                   ) : (
-                    <><Mic size={28}/> [ OPEN CHANNEL ]</>
+                    <><Mic size={28}/> [ INK ]</>
                   )}
                 </button>
+
+                <button 
+                  onClick={() => setIsMuted(!isMuted)} 
+                  className={cn(
+                    "w-20 h-20 flex flex-col items-center justify-center border-4 border-black transition-all",
+                    isMuted ? "bg-yellow-400 text-black shadow-sketch rotate-3" : "bg-white text-zinc-400 hover:text-black"
+                  )}
+                  title={isMuted ? "Audio Off" : "Audio On"}
+                >
+                  {isMuted ? <VolumeX size={32}/> : <Volume2 size={32}/>}
+                  <span className="text-[8px] font-black mt-1 uppercase">Mute</span>
+                </button>
                 
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2 shrink-0">
                    <button
                     onClick={exportPDF}
                     className="p-2 border-2 border-black hover:bg-zinc-100 transition-all font-bold text-xs flex items-center gap-2 uppercase"
                   >
-                    <FileText size={14}/> Export
+                    <FileText size={14}/> Transcript
                    </button>
                    <button
-                    onClick={() => { setMessages([]); setCurrentTranscript(''); }}
-                    className="p-2 border-2 border-black hover:bg-zinc-100 transition-all font-bold text-xs flex items-center gap-2 uppercase"
+                    onClick={handleEndSession}
+                    className="p-2 bg-black text-white hover:bg-red-600 transition-all font-bold text-xs flex items-center gap-2 uppercase"
                   >
-                    <RotateCcw size={14}/> Reset
+                    <X size={14}/> End & Save
                    </button>
                 </div>
                </div>
