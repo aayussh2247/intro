@@ -127,7 +127,10 @@ export const api = {
       },
       body: JSON.stringify({ question, resumeContext, provider }),
     });
-    if (!res.ok) throw new Error('AI Generation failed');
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'The scribe is paralyzed.');
+    }
     return res.json();
   },
   summarizeInterview: async (transcript: string, provider?: string) => {
@@ -139,7 +142,10 @@ export const api = {
       },
       body: JSON.stringify({ transcript, provider }),
     });
-    if (!res.ok) throw new Error('AI Summarization failed');
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Summarization failed.');
+    }
     return res.json();
   },
   verifyKey: async (provider: string, key: string) => {
@@ -151,6 +157,10 @@ export const api = {
       },
       body: JSON.stringify({ provider, key }),
     });
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Verification failed.');
+    }
     return res.json();
   },
   requestPayment: async (data: any) => {
@@ -162,6 +172,10 @@ export const api = {
       },
       body: JSON.stringify(data),
     });
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Payment request failed.');
+    }
     return res.json();
   },
 };

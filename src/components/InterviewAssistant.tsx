@@ -196,12 +196,14 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
       setMessages(prev => [...prev, newAnswerMsg]);
     } catch (error: any) {
       console.error('AI Error:', error);
+      const errorMsg = error.message?.includes('Fuel') 
+        ? '⚠️ Out of Fuel! Refill in Profile or add your own Key.'
+        : `⚠️ ${error.message || 'The scribe is stuck.'}`;
+
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: 'assistant',
-        content: error.message?.includes('Fuel') 
-          ? '⚠️ Out of Fuel! Please check your profile to refill or add your key.'
-          : '⚠️ Connection unstable. The ink is drying too fast.',
+        content: errorMsg,
         timestamp: new Date()
       }]);
     } finally {
