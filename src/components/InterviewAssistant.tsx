@@ -308,24 +308,6 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
           <div className="flex items-center gap-3">
             {!isMinimized && (
               <>
-                <button 
-                  onClick={() => setIsMuted(!isMuted)} 
-                  className={cn("p-1 hover:text-yellow-400 transition-colors", isMuted && "text-yellow-400")}
-                  title={isMuted ? "Unmute" : "Mute"}
-                >
-                  {isMuted ? <VolumeX size={20}/> : <Volume2 size={20}/>}
-                </button>
-                <select 
-                  className="bg-zinc-900 border border-zinc-700 text-[10px] font-bold uppercase rounded px-2 py-1 outline-none"
-                  value={provider}
-                  onChange={(e: any) => setProvider(e.target.value)}
-                >
-                  <option value="gemini">Gemini</option>
-                  <option value="claude">Claude</option>
-                  <option value="openai">GPT-4</option>
-                  <option value="kimi">Kimi</option>
-                  <option value="grok">Grok</option>
-                </select>
                 <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-1 hover:text-yellow-400 transition-colors">
                   {isFullScreen ? <Shrink size={20}/> : <Expand size={20}/>}
                 </button>
@@ -461,47 +443,37 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
                 <button
                   onClick={toggleListening}
                   className={cn(
-                    "flex-1 py-4 font-accent text-3xl font-bold transition-all flex items-center justify-center gap-4 border-4 border-black",
+                    "flex-1 py-6 font-accent text-4xl font-bold transition-all flex items-center justify-center gap-4 border-4 border-black",
                     isListening 
                       ? "bg-red-600 text-white shadow-sketch -rotate-1" 
                       : "bg-white text-black hover:shadow-sketch rotate-1"
                   )}
                 >
                   {isListening ? (
-                    <><MicOff size={28}/> [ CUT ]</>
+                    <><MicOff size={32}/> [ CUT ]</>
                   ) : (
-                    <><Mic size={28}/> [ INK ]</>
+                    <><Mic size={32}/> [ START ]</>
                   )}
                 </button>
 
                 <button 
                   onClick={() => setIsMuted(!isMuted)} 
                   className={cn(
-                    "w-24 h-24 flex flex-col items-center justify-center border-4 border-black transition-all group z-10",
-                    isMuted ? "bg-yellow-400 text-black shadow-sketch rotate-3" : "bg-white text-zinc-400 hover:text-black hover:border-blue-900"
+                    "w-28 h-28 flex flex-col items-center justify-center border-4 border-black transition-all group z-10",
+                    isMuted ? "bg-yellow-400 text-black shadow-sketch rotate-3" : "bg-white text-zinc-400 hover:text-black"
                   )}
-                  title={isMuted ? "Unmute Scribe" : "Mute Scribe"}
                 >
-                  {isMuted ? <VolumeX size={36} className="animate-bounce" /> : <Mic size={36}/>}
-                  <span className="text-[10px] font-black mt-2 uppercase tracking-tighter">
-                    {isMuted ? 'SILENCED' : 'LISTENING'}
-                  </span>
+                  {isMuted ? <VolumeX size={44} className="animate-bounce" /> : <Mic size={44}/>}
+                  <span className="text-[10px] font-black mt-2">MUTE</span>
                 </button>
                 
-                <div className="flex flex-col gap-2 shrink-0">
-                   <button
-                    onClick={exportPDF}
-                    className="p-2 border-2 border-black hover:bg-zinc-100 transition-all font-bold text-xs flex items-center gap-2 uppercase"
-                  >
-                    <FileText size={14}/> Transcript
-                   </button>
-                   <button
-                    onClick={handleEndSession}
-                    className="p-2 bg-black text-white hover:bg-red-600 transition-all font-bold text-xs flex items-center gap-2 uppercase"
-                  >
-                    <X size={14}/> End & Save
-                   </button>
-                </div>
+                <button
+                  onClick={handleEndSession}
+                  className="w-28 h-28 bg-black text-white hover:bg-red-600 transition-all border-4 border-black flex flex-col items-center justify-center -rotate-2 shadow-sketch"
+                >
+                  <X size={32}/>
+                  <span className="text-[10px] font-black mt-2">END</span>
+                </button>
                </div>
             </div>
           </>
