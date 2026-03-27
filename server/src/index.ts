@@ -16,7 +16,19 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'https://intro-ai.vercel.app', 'https://intro-ai-frontend.onrender.com'],
+  origin: (origin, callback) => {
+    const allowed = [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'https://intro-ai.vercel.app',
+      'https://intro-ai-frontend.onrender.com'
+    ];
+    if (!origin || allowed.includes(origin) || origin.endsWith('.onrender.com')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
