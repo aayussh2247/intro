@@ -261,7 +261,10 @@ app.post('/api/user/verify-key', authenticate(), async (req: any, res: Response)
   try {
     if (provider === 'gemini') {
       const client = new GoogleGenAI({ apiKey: key });
-      await client.models.generateContent({ model: 'gemini-1.5-flash', contents: 'Hi' });
+      await client.models.generateContent({ 
+        model: 'gemini-1.5-flash', 
+        contents: [{ role: 'user', parts: [{ text: 'Hi' }] }]
+      });
     } else if (provider === 'anthropic') {
       const client = new Anthropic({ apiKey: key });
       await client.messages.create({ model: 'claude-3-haiku-20240307', max_tokens: 1, messages: [{ role: 'user', content: 'Hi' }] });
@@ -382,10 +385,22 @@ app.post('/api/ai/generate', authenticate(), async (req: any, res: Response) => 
     let text = '';
     const user = (req as any).user;
 
-    // Check Fuel
-    if (user && (user.fuel || 0) <= 0) {
+    if (!user) {
+        console.error('[AI] No user object in request');
+        return res.status(401).json({ error: 'Identity matrix unreadable. Please re-sign.' });
+    }
+
+    // Check & Initialize Fuel for existing users
+    if (user.fuel === undefined || user.fuel === null) {
+        user.fuel = 100;
+        await user.save();
+    }
+    
+    if (user.fuel <= 0 && user.plan !== 'premium') {
       return res.status(403).json({ error: 'Out of Fuel! Please add more in your profile.' });
     }
+
+    console.log(`[AI] Generating with ${provider} for ${user.email}`);
 
     // Use User's own key if available
     const userKey = user?.apiKeys?.[provider];
@@ -431,18 +446,18 @@ app.post('/api/ai/generate', authenticate(), async (req: any, res: Response) => 
         return res.status(500).json({ error: 'Gemini API not configured.' });
       }
 
-      let lastError: any;
       for (const client of geminiClients) {
         try {
-          const result = await client.models.generateContent({
+          const result = await (client as any).models.generateContent({
             model: 'gemini-1.5-flash',
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            config: { systemInstruction: SYSTEM_INSTRUCTION }
+            system_instruction: SYSTEM_INSTRUCTION
           });
           text = (result.text || '').trim();
           if (text) break;
         } catch (err) {
           lastError = err;
+          console.error('[Gemini Loop Error]', (err as Error).message);
         }
       }
       if (!text && lastError) throw lastError;
@@ -484,14 +499,13 @@ app.post('/api/ai/summarize', authenticate(), async (req: any, res: Response) =>
         return res.status(500).json({ error: 'GEMINI_API_KEY is not configured.' });
       }
 
-      let lastError: any;
       for (const client of geminiClients) {
         try {
-          const result = await client.models.generateContent({
+          const result = await (client as any).models.generateContent({
             model: 'gemini-1.5-flash',
             contents: [{ role: 'user', parts: [{ text: prompt }] }]
           });
-          summary = result.text || '';
+          summary = (result.text || '').trim();
           if (summary) break;
         } catch (err) {
           console.error('Gemini Summarization Key Fail, trying next...', (err as Error).message);
@@ -516,7 +530,7 @@ app.get('/api/ai/models', async (req: Request, res: Response) => {
     if (clients.length === 0) {
       return res.status(500).json({ error: 'GEMINI_API_KEY is not configured.' });
     }
-    const response = await clients[0].models.list();
+    const response = await (clients[0] as any).models.list();
     res.json(response);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -524,6 +538,15 @@ app.get('/api/ai/models', async (req: Request, res: Response) => {
 });
 
 // Admin Routes
+app.get('/api/admin/users', authenticate('admin'), async (req: any, res: Response) => {
+  try {
+    const users = await User.find().sort({ createdAt: -1 });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 app.get('/api/admin/users', authenticate('admin'), async (req: any, res: Response) => {
   try {
     const users = await User.find().sort({ createdAt: -1 });
