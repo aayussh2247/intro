@@ -8,6 +8,7 @@ import nodemailer from 'nodemailer';
 import axios from 'axios';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -152,7 +153,6 @@ app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const crypto = require('crypto');
     const resetToken = crypto.randomBytes(32).toString('hex');
     const resetExpires = new Date(Date.now() + 3600000); // 1 hour
 
@@ -363,6 +363,11 @@ app.post('/api/ai/generate', authenticate, async (req: any, res: Response) => {
     let text = '';
     const user = (req as any).user;
 
+    // Check Fuel
+    if (user && (user.fuel || 0) <= 0) {
+      return res.status(403).json({ error: 'Out of Fuel! Please add more in your profile.' });
+    }
+
     // Use User's own key if available
     const userKey = user?.apiKeys?.[provider];
 
@@ -432,8 +437,11 @@ app.post('/api/ai/generate', authenticate, async (req: any, res: Response) => {
 
     res.json({ text, fuel: user?.fuel });
   } catch (err) {
-    console.error('AI Generation Error:', err);
-    res.status(500).json({ error: 'Failed to generate AI response' });
+    console.error('AI ERROR [Generate]:', (err as Error).message);
+    if ((err as any).response) {
+      console.error('API Response Error:', (err as any).response.data);
+    }
+    res.status(500).json({ error: 'AI Generation failed: ' + (err as Error).message });
   }
 });
 

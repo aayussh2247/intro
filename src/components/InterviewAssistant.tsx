@@ -23,7 +23,7 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
   const [resumeContext, setResumeContext] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [provider, setProvider] = useState<'gemini' | 'claude'>('claude');
+  const [provider, setProvider] = useState<'gemini' | 'claude' | 'openai' | 'kimi' | 'grok'>('gemini');
   
   const recognitionRef = useRef<any>(null);
   const transcriptBufferRef = useRef<string>('');
@@ -274,6 +274,9 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
               >
                 <option value="gemini">Gemini</option>
                 <option value="claude">Claude</option>
+                <option value="openai">OpenAI</option>
+                <option value="kimi">Kimi</option>
+                <option value="grok">Grok</option>
               </select>
             </div>
           </div>
