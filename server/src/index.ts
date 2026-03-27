@@ -50,6 +50,9 @@ const userSchema = new mongoose.Schema({
   credits: { type: Number, default: 3 }, // Free tier: 3 interviews
   fuel: { type: Number, default: 100 }, // 100 energy units
   plan: { type: String, enum: ['free', 'basic', 'premium'], default: 'free' },
+  role: { type: String, enum: ['user', 'admin'], default: 'user' },
+  subscriptionEnabled: { type: Boolean, default: false },
+  subscriptionExpires: Date,
   apiKeys: {
     gemini: String,
     openai: String,
@@ -209,7 +212,7 @@ app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
 });
 
 // Auth Middleware
-const authenticate = async (req: any, res: any, next: any) => {
+const authenticate = (role?: 'user' | 'admin') => async (req: any, res: any, next: any) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -217,6 +220,11 @@ const authenticate = async (req: any, res: any, next: any) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
     req.user = await User.findById(decoded.id);
     if (!req.user) return res.status(401).json({ error: 'User not found' });
+    
+    if (role && req.user.role !== role) {
+      return res.status(403).json({ error: 'Forbidden: Admin access required' });
+    }
+    
     next();
   } catch (err) {
     res.status(401).json({ error: 'Invalid token' });
@@ -224,11 +232,11 @@ const authenticate = async (req: any, res: any, next: any) => {
 };
 
 // User Profile & Keys
-app.get('/api/user', authenticate, async (req: any, res: Response) => {
+app.get('/api/user', authenticate(), async (req: any, res: Response) => {
   res.json(req.user);
 });
 
-app.put('/api/user', authenticate, async (req: any, res: Response) => {
+app.put('/api/user', authenticate(), async (req: any, res: Response) => {
   try {
     const user = await User.findByIdAndUpdate(req.user._id, { $set: req.body }, { new: true });
     res.json(user);
@@ -237,7 +245,7 @@ app.put('/api/user', authenticate, async (req: any, res: Response) => {
   }
 });
 
-app.post('/api/user/verify-key', authenticate, async (req: any, res: Response) => {
+app.post('/api/user/verify-key', authenticate(), async (req: any, res: Response) => {
   const { provider, key } = req.body;
   try {
     if (provider === 'gemini') {
@@ -259,7 +267,7 @@ app.post('/api/user/verify-key', authenticate, async (req: any, res: Response) =
 });
 
 // Interviews
-app.get('/api/interviews', authenticate, async (req: any, res: Response) => {
+app.get('/api/interviews', authenticate(), async (req: any, res: Response) => {
   try {
     const interviews = await Interview.find({ userId: req.user._id }).sort({ createdAt: -1 });
     res.json(interviews);
@@ -269,7 +277,7 @@ app.get('/api/interviews', authenticate, async (req: any, res: Response) => {
 });
 
 // Create Interview & Trigger Notifications
-app.post('/api/interviews', authenticate, async (req: any, res: Response) => {
+app.post('/api/interviews', authenticate(), async (req: any, res: Response) => {
   try {
     const user = req.user;
     
@@ -343,7 +351,7 @@ app.delete('/api/interviews/:id', async (req: Request, res: Response) => {
 });
 
 // AI Endpoints
-app.post('/api/ai/generate', authenticate, async (req: any, res: Response) => {
+app.post('/api/ai/generate', authenticate(), async (req: any, res: Response) => {
   const { question, resumeContext, provider = AI_PROVIDER } = req.body;
   
   try {
@@ -445,7 +453,7 @@ app.post('/api/ai/generate', authenticate, async (req: any, res: Response) => {
   }
 });
 
-app.post('/api/ai/summarize', authenticate, async (req: any, res: Response) => {
+app.post('/api/ai/summarize', authenticate(), async (req: any, res: Response) => {
   const { transcript, provider = AI_PROVIDER } = req.body;
   
   try {
@@ -499,6 +507,34 @@ app.get('/api/ai/models', async (req: Request, res: Response) => {
     }
     const response = await clients[0].models.list();
     res.json(response);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// Admin Routes
+app.get('/api/admin/users', authenticate('admin'), async (req: any, res: Response) => {
+  try {
+    const users = await User.find().sort({ createdAt: -1 });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.put('/api/admin/users/:id', authenticate('admin'), async (req: any, res: Response) => {
+  try {
+    const user = await User.findByIdAndUpdate(req.params.id, { $set: req.body }, { new: true });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.get('/api/admin/interviews', authenticate('admin'), async (req: any, res: Response) => {
+  try {
+    const interviews = await Interview.find().populate('userId', 'name email').sort({ createdAt: -1 });
+    res.json(interviews);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
