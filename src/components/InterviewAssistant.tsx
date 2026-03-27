@@ -419,61 +419,65 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input & Controls */}
-            <div className="p-4 bg-white border-t-4 border-black space-y-4">
+            {/* Footer Commands */}
+            <div className="p-4 bg-zinc-900 border-t-4 border-black space-y-4 shrink-0">
+               <div className="flex justify-center">
+                  <span className="text-[10px] font-black tracking-[0.3em] text-zinc-500 uppercase">--- SESSION COMMANDS ---</span>
+               </div>
+               
+               <div className="flex items-center justify-between gap-3">
+                {/* 1. START/STOP (MASSIVE RED) */}
+                <button
+                  onClick={toggleListening}
+                  className={cn(
+                    "flex-1 py-8 font-accent text-5xl font-bold transition-all flex items-center justify-center gap-3 border-4 border-black shadow-sketch active:translate-y-1",
+                    isListening 
+                      ? "bg-red-700 text-white animate-pulse" 
+                      : "bg-red-500 text-white hover:bg-red-600"
+                  )}
+                >
+                  {isListening ? <MicOff size={40}/> : <Mic size={40}/>}
+                  <span>{isListening ? 'STOP' : 'START'}</span>
+                </button>
+
+                {/* 2. MUTE (YELLOW) */}
+                <button 
+                  onClick={() => setIsMuted(!isMuted)} 
+                  className={cn(
+                    "w-24 h-24 sm:w-32 sm:h-32 flex flex-col items-center justify-center border-4 border-black transition-all rotate-2 active:rotate-0",
+                    isMuted ? "bg-yellow-400 text-black shadow-sketch" : "bg-white text-zinc-400"
+                  )}
+                >
+                  {isMuted ? <VolumeX size={44} className="animate-bounce" /> : <Mic size={44}/>}
+                  <span className="text-[10px] font-black mt-2">{isMuted ? 'SILENT' : 'MUTE'}</span>
+                </button>
+                
+                {/* 3. END (BLACK) */}
+                <button
+                  onClick={handleEndSession}
+                  className="w-24 h-24 sm:w-32 sm:h-32 bg-black text-white hover:bg-zinc-800 transition-all border-4 border-black flex flex-col items-center justify-center -rotate-2 shadow-sketch active:translate-x-1"
+                >
+                  <X size={44}/>
+                  <span className="text-[10px] font-black mt-2">END</span>
+                </button>
+               </div>
+
                {/* Manual Input Bar */}
-               <div className="flex gap-2">
+               <div className="flex gap-2 bg-zinc-800 p-2 rounded-sm border-2 border-zinc-700">
                   <input 
                     value={manualInput}
                     onChange={(e) => setManualInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleManualSend()}
-                    placeholder="Type or fix a transcript here..."
-                    className="flex-1 border-2 border-black p-3 font-bold text-sm outline-none focus:bg-yellow-50"
+                    placeholder="Type backup transcript..."
+                    className="flex-1 bg-transparent text-white p-2 font-bold text-xs outline-none placeholder:text-zinc-600"
                   />
                   <button 
                     onClick={handleManualSend}
                     disabled={!manualInput.trim() || isProcessing}
-                    className="aspect-square bg-black text-white p-3 hover:bg-yellow-400 hover:text-black transition-all disabled:opacity-30"
+                    className="bg-zinc-700 text-white p-2 rounded hover:bg-zinc-600 transition-all"
                   >
-                    <Send size={20}/>
+                    <Send size={16}/>
                   </button>
-               </div>
-
-               <div className="flex items-center justify-between gap-4">
-                <button
-                  onClick={toggleListening}
-                  className={cn(
-                    "flex-1 py-6 font-accent text-4xl font-bold transition-all flex items-center justify-center gap-4 border-4 border-black",
-                    isListening 
-                      ? "bg-red-600 text-white shadow-sketch -rotate-1" 
-                      : "bg-white text-black hover:shadow-sketch rotate-1"
-                  )}
-                >
-                  {isListening ? (
-                    <><MicOff size={32}/> [ CUT ]</>
-                  ) : (
-                    <><Mic size={32}/> [ START ]</>
-                  )}
-                </button>
-
-                <button 
-                  onClick={() => setIsMuted(!isMuted)} 
-                  className={cn(
-                    "w-28 h-28 flex flex-col items-center justify-center border-4 border-black transition-all group z-10",
-                    isMuted ? "bg-yellow-400 text-black shadow-sketch rotate-3" : "bg-white text-zinc-400 hover:text-black"
-                  )}
-                >
-                  {isMuted ? <VolumeX size={44} className="animate-bounce" /> : <Mic size={44}/>}
-                  <span className="text-[10px] font-black mt-2">MUTE</span>
-                </button>
-                
-                <button
-                  onClick={handleEndSession}
-                  className="w-28 h-28 bg-black text-white hover:bg-red-600 transition-all border-4 border-black flex flex-col items-center justify-center -rotate-2 shadow-sketch"
-                >
-                  <X size={32}/>
-                  <span className="text-[10px] font-black mt-2">END</span>
-                </button>
                </div>
             </div>
           </>
