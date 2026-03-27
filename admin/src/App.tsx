@@ -49,6 +49,17 @@ interface Interview {
   createdAt: string;
 }
 
+interface Payment {
+  _id: string;
+  userId: { _id: string; name: string; email: string };
+  plan: string;
+  amount: number;
+  duration: string;
+  status: 'pending' | 'verified' | 'rejected';
+  message: string;
+  createdAt: string;
+}
+
 // --- Main App ---
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -56,6 +67,7 @@ function App() {
   const [view, setView] = useState<'dashboard' | 'users' | 'payments' | 'activity'>('dashboard');
   const [users, setUsers] = useState<User[]>([]);
   const [interviews, setInterviews] = useState<Interview[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -70,6 +82,12 @@ function App() {
       fetchData();
     }
   }, [token]);
+
+  useEffect(() => {
+    if (token && view === 'payments') {
+      fetchPayments();
+    }
+  }, [token, view]);
 
   const fetchData = async () => {
     if (!token) return;
@@ -91,6 +109,17 @@ function App() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPayments = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/admin/payments`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setPayments(res.data);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -126,6 +155,32 @@ function App() {
     } catch (err) {
       console.error(err);
       alert('Failed to transmit data to core.');
+    }
+  };
+
+  const verifyPayment = async (id: string, status: string, userId: string, plan: string) => {
+    try {
+      await axios.put(`${API_BASE}/admin/payments/${id}`, { status }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (status === 'verified') {
+        // Upgrade User
+        const expires = new Date();
+        expires.setMonth(expires.getMonth() + 1);
+        await axios.put(`${API_BASE}/admin/users/${userId}`, { 
+          plan, 
+          subscriptionEnabled: true,
+          subscriptionExpires: expires.toISOString(),
+          fuel: 100, // Refill fuel on payment
+          credits: plan === 'premium' ? 999 : 50
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      fetchData();
+      fetchPayments();
+    } catch (err) {
+      alert('Verification failed');
     }
   };
 
@@ -360,6 +415,79 @@ function App() {
     </div>
   );
 
+  const PaymentView = () => (
+    <div className="space-y-12">
+      <div className="mb-12">
+        <h1 className="text-6xl font-black italic neon-text-purple tracking-tighter uppercase mb-2">SUBSCRIPTION HUB</h1>
+        <p className="text-zinc-500 text-[10px] font-black tracking-[0.4em] uppercase opacity-80">Economic flow and manual authorization center</p>
+      </div>
+      
+      <div className="grid grid-cols-1 gap-6">
+        {payments.length === 0 && <p className="text-center text-zinc-500 py-20 font-black uppercase">No Pulse Requests Found</p>}
+        {payments.map(p => (
+          <div key={p._id} className={`glass-panel p-8 rounded-[2.5rem] border-l-8 ${p.status === 'pending' ? 'border-l-yellow-400' : p.status === 'verified' ? 'border-l-green-400' : 'border-l-red-400'} flex items-center justify-between group hover:pl-10 transition-all`}>
+              <div className="flex items-center gap-6">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center border ${p.status === 'pending' ? 'text-yellow-400 border-yellow-400/30' : 'text-purple-400 border-purple-400/30'}`}>
+                    <CreditCard size={28}/>
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black uppercase mb-1 tracking-tight">{p.userId?.name}'s Request</h3>
+                  <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest">{p.userId?.email} // {p.duration}</p>
+                  <p className="text-zinc-400 text-xs mt-2 italic">"{p.message}"</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-12 text-right">
+                <div>
+                  <p className="text-[10px] font-black uppercase text-zinc-600 mb-1">Status</p>
+                  <p className={`text-sm font-black uppercase tracking-tighter ${p.status === 'pending' ? 'text-yellow-400' : 'text-green-400'}`}>{p.status.toUpperCase()}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase text-zinc-600 mb-1">Tier / Amount</p>
+                  <p className="text-sm font-black text-purple-400 uppercase tracking-tighter">₹{p.amount} ({p.plan})</p>
+                </div>
+                {p.status === 'pending' && (
+                  <div className="flex gap-2">
+                    <button onClick={() => verifyPayment(p._id, 'verified', p.userId?._id, p.plan)} className="bg-green-500 text-black px-6 py-3 rounded-xl font-black uppercase text-[10px]">Approve</button>
+                    <button onClick={() => verifyPayment(p._id, 'rejected', p.userId?._id, p.plan)} className="bg-red-500 text-white px-6 py-3 rounded-xl font-black uppercase text-[10px]">Reject</button>
+                  </div>
+                )}
+              </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const ActivityView = () => (
+    <div className="space-y-12">
+      <div className="mb-12">
+        <h1 className="text-6xl font-black italic neon-text-green tracking-tighter uppercase mb-2">SIGNAL REPOSITORY</h1>
+        <p className="text-zinc-500 text-[10px] font-black tracking-[0.4em] uppercase opacity-80">Deep-dive logs of all artificial interactions</p>
+      </div>
+      <div className="grid grid-cols-1 gap-6">
+        {interviews.map(inv => (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.98 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            key={inv._id} 
+            className="glass-panel p-10 rounded-[3rem] border-l-8 border-l-green-400 group hover:bg-zinc-950/40 transition-all"
+          >
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-2xl font-black uppercase tracking-tighter italic mb-1 group-hover:text-green-400 transition-colors">{inv.title}</h3>
+                <p className="text-zinc-500 text-[10px] uppercase font-black bg-zinc-900 px-3 py-1 rounded inline-block mt-2 tracking-widest border border-zinc-800">Origin: {inv.userId?.name || 'ERR'} ({inv.userId?.email || 'N/A'})</p>
+              </div>
+              <span className="text-zinc-700 text-[10px] font-black uppercase tracking-widest font-mono border border-zinc-800 px-4 py-2 rounded-xl">{new Date(inv.createdAt).toLocaleString()}</span>
+            </div>
+            <div className="p-6 bg-black/40 rounded-3xl border border-zinc-900/50">
+              <p className="text-zinc-400 text-sm leading-relaxed font-medium italic opacity-80">"{inv.summary}"</p>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen flex bg-black font-sans text-cyan-50 relative overflow-hidden grid-bg">
       <div className="absolute inset-0 scanline opacity-20 pointer-events-none" />
@@ -413,75 +541,8 @@ function App() {
             >
               {view === 'dashboard' && <Dashboard />}
               {view === 'users' && <UserList />}
-              {view === 'payments' && (
-                 <div className="space-y-12">
-                   <div className="mb-12">
-                     <h1 className="text-6xl font-black italic neon-text-purple tracking-tighter uppercase mb-2">SUBSCRIPTION HUB</h1>
-                     <p className="text-zinc-500 text-[10px] font-black tracking-[0.4em] uppercase opacity-80">Economic flow and manual authorization center</p>
-                   </div>
-                   
-                   <div className="grid grid-cols-1 gap-6">
-                      {users.filter(u => u.subscriptionEnabled || u.plan !== 'free').map(u => (
-                        <div key={u._id} className="glass-panel p-8 rounded-[2.5rem] border-l-8 border-l-purple-500 flex items-center justify-between group hover:pl-10 transition-all">
-                           <div className="flex items-center gap-6">
-                              <div className="w-16 h-16 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400 border border-purple-500/30">
-                                 <CreditCard size={28}/>
-                              </div>
-                              <div>
-                                <h3 className="text-2xl font-black uppercase mb-1 tracking-tight group-hover:text-purple-400 transition-colors">{u.name}'s Channel</h3>
-                                <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest">{u.email}</p>
-                              </div>
-                           </div>
-                           <div className="flex items-center gap-12 text-right">
-                              <div>
-                                <p className="text-[10px] font-black uppercase text-zinc-600 mb-1">Status</p>
-                                <p className="text-sm font-black text-green-400 uppercase tracking-tighter">● VERIFIED & APPROVED</p>
-                              </div>
-                              <div>
-                                <p className="text-[10px] font-black uppercase text-zinc-600 mb-1">Tier</p>
-                                <p className="text-sm font-black text-purple-400 uppercase tracking-tighter shadow-sm">{u.plan}</p>
-                              </div>
-                              <button 
-                                onClick={() => setEditingUser(u)}
-                                className="px-8 py-4 bg-zinc-950 border border-zinc-900 rounded-2xl text-[10px] font-black uppercase hover:neon-border-purple hover:text-purple-400 transition-all"
-                              >
-                                Modify Pulse
-                              </button>
-                           </div>
-                        </div>
-                      ))}
-                   </div>
-                 </div>
-              )}
-              {view === 'activity' && (
-                <div className="space-y-12">
-                  <div className="mb-12">
-                    <h1 className="text-6xl font-black italic neon-text-green tracking-tighter uppercase mb-2">SIGNAL REPOSITORY</h1>
-                    <p className="text-zinc-500 text-[10px] font-black tracking-[0.4em] uppercase opacity-80">Deep-dive logs of all artificial interactions</p>
-                  </div>
-                  <div className="grid grid-cols-1 gap-6">
-                    {interviews.map(inv => (
-                      <motion.div 
-                        initial={{ opacity: 0, scale: 0.98 }}
-                        whileInView={{ opacity: 1, scale: 1 }}
-                        key={inv._id} 
-                        className="glass-panel p-10 rounded-[3rem] border-l-8 border-l-green-400 group hover:bg-zinc-950/40 transition-all"
-                      >
-                        <div className="flex justify-between items-start mb-6">
-                          <div>
-                            <h3 className="text-2xl font-black uppercase tracking-tighter italic mb-1 group-hover:text-green-400 transition-colors">{inv.title}</h3>
-                            <p className="text-zinc-500 text-[10px] uppercase font-black bg-zinc-900 px-3 py-1 rounded inline-block mt-2 tracking-widest border border-zinc-800">Origin: {inv.userId?.name || 'ERR'} ({inv.userId?.email || 'N/A'})</p>
-                          </div>
-                          <span className="text-zinc-700 text-[10px] font-black uppercase tracking-widest font-mono border border-zinc-800 px-4 py-2 rounded-xl">{new Date(inv.createdAt).toLocaleString()}</span>
-                        </div>
-                        <div className="p-6 bg-black/40 rounded-3xl border border-zinc-900/50">
-                          <p className="text-zinc-400 text-sm leading-relaxed font-medium italic opacity-80">"{inv.summary}"</p>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {view === 'payments' && <PaymentView />}
+              {view === 'activity' && <ActivityView />}
             </motion.div>
           </AnimatePresence>
         )}
@@ -517,7 +578,7 @@ function App() {
                       type="number" 
                       className="w-full h-16 bg-black border border-zinc-900 p-6 rounded-2xl outline-none focus:border-cyan-400 text-xl font-black transition-all"
                       value={editingUser.fuel}
-                      onChange={e => setEditingUser({...editingUser, fuel: parseInt(e.target.value)})}
+                      onChange={e => setEditingUser({...editingUser, fuel: parseInt(e.target.value) || 0})}
                     />
                     <button 
                       onClick={() => updateUser(editingUser._id, { fuel: editingUser.fuel })}
@@ -535,7 +596,7 @@ function App() {
                       type="number" 
                       className="w-full h-16 bg-black border border-zinc-900 p-6 rounded-2xl outline-none focus:border-cyan-400 text-xl font-black transition-all"
                       value={editingUser.credits}
-                      onChange={e => setEditingUser({...editingUser, credits: parseInt(e.target.value)})}
+                      onChange={e => setEditingUser({...editingUser, credits: parseInt(e.target.value) || 0})}
                     />
                     <button 
                       onClick={() => updateUser(editingUser._id, { credits: editingUser.credits })}

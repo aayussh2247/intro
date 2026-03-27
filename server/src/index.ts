@@ -85,8 +85,19 @@ const interviewSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+const paymentSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  plan: String,
+  amount: Number,
+  duration: String, // e.g. "1 Month"
+  status: { type: String, enum: ['pending', 'verified', 'rejected'], default: 'pending' },
+  message: String,
+  requestDate: { type: Date, default: Date.now }
+}, { timestamps: true });
+
 const User = mongoose.model('User', userSchema);
 const Interview = mongoose.model('Interview', interviewSchema);
+const Payment = mongoose.model('Payment', paymentSchema);
 
 // Transporter Setup
 const transporter = nodemailer.createTransport({
@@ -535,6 +546,38 @@ app.get('/api/admin/interviews', authenticate('admin'), async (req: any, res: Re
   try {
     const interviews = await Interview.find().populate('userId', 'name email').sort({ createdAt: -1 });
     res.json(interviews);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// Payments
+app.post('/api/payments/request', authenticate(), async (req: any, res: Response) => {
+  try {
+    const payment = await Payment.create({
+      userId: req.user._id,
+      ...req.body,
+      status: 'pending'
+    });
+    res.json(payment);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.get('/api/admin/payments', authenticate('admin'), async (req: any, res: Response) => {
+  try {
+    const payments = await Payment.find().populate('userId', 'name email').sort({ createdAt: -1 });
+    res.json(payments);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.put('/api/admin/payments/:id', authenticate('admin'), async (req: any, res: Response) => {
+  try {
+    const payment = await Payment.findByIdAndUpdate(req.params.id, { $set: req.body }, { new: true });
+    res.json(payment);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }

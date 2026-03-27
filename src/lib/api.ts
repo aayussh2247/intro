@@ -153,4 +153,15 @@ export const api = {
     });
     return res.json();
   },
+  requestPayment: async (data: any) => {
+    const res = await fetch(`${API_BASE_URL}/payments/request`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}` 
+      },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
 };

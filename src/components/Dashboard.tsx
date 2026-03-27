@@ -30,6 +30,7 @@ export function Dashboard({
   const [loadingResume, setLoadingResume] = useState(false);
   const [activeTab, setActiveTab] = useState<'interviews' | 'resume' | 'profile'>('interviews');
   const [notification, setNotification] = useState<string | null>(null);
+  const [upgradePlan, setUpgradePlan] = useState<'basic' | 'premium' | null>(null);
 
   useEffect(() => {
     if (notification) {
@@ -334,15 +335,17 @@ export function Dashboard({
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="max-w-4xl mx-auto space-y-10 md:space-y-16"
+            className="max-w-5xl mx-auto space-y-12 md:space-y-20"
           >
+            {/* 🖊️ IDENTITY SECTION */}
             <section>
-              <h1 className="text-5xl md:text-6xl font-accent font-bold"><span className="marker text-3xl md:text-4xl">Details</span></h1>
-              <p className="text-zinc-500 text-base md:text-xl italic mt-1 font-body">Manage your identity.</p>
+              <h1 className="text-5xl md:text-6xl font-accent font-bold"><span className="marker text-3xl md:text-4xl">Identity</span> Card</h1>
+              <p className="text-zinc-500 text-base md:text-xl italic mt-1 font-body">Manage your scribe profile.</p>
               
-              <div className="mt-12 bg-white hand-drawn shadow-sketch p-12 flex flex-col md:flex-row gap-16 items-center rotate-1">
-                <div className="w-40 h-40 border-4 border-black flex items-center justify-center -rotate-3 bg-yellow-100 flex-shrink-0">
-                  <span className="text-8xl font-accent font-bold">{user.name?.[0] || 'U'}</span>
+              <div className="mt-12 bg-white hand-drawn shadow-sketch p-8 md:p-12 flex flex-col md:flex-row gap-8 md:gap-16 items-center rotate-1">
+                <div className="w-40 h-40 border-4 border-black flex items-center justify-center -rotate-3 bg-yellow-100 flex-shrink-0 relative overflow-hidden">
+                   <div className="absolute top-0 left-0 w-full h-full paper-dots opacity-30"></div>
+                  <span className="text-8xl font-accent font-bold relative z-10">{user.name?.[0] || 'U'}</span>
                 </div>
                 
                 <div className="flex-1 w-full space-y-12">
@@ -376,41 +379,242 @@ export function Dashboard({
               </div>
             </section>
 
-            <section>
-              <h2 className="text-4xl md:text-5xl font-accent font-bold mb-8 md:mb-10"><span className="marker text-2xl md:text-3xl">Ink</span> Plans</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
-                <div className="bg-white hand-drawn p-6 md:p-8 text-center rotate-1">
-                  <h3 className="text-2xl md:text-3xl font-accent font-bold mb-3 md:mb-4">Free Tier</h3>
-                  <p className="text-5xl md:text-6xl font-accent font-bold mb-3 md:mb-4">{user.credits}</p>
-                  <p className="text-zinc-400 text-base md:text-lg font-body italic">Available Sessions</p>
+            {/* 🔋 FUEL & API KEYS SECTION */}
+            <section className="relative">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-4xl md:text-5xl font-accent font-bold"><span className="marker text-2xl md:text-3xl">Fuel</span> & Keys</h2>
+                  <p className="text-zinc-500 text-base md:text-lg italic mt-1 font-body">Add your own power source for unlimited scribing.</p>
+                </div>
+                <div className="text-right hand-drawn bg-white p-4 -rotate-2">
+                   <p className="text-[10px] font-bold uppercase text-zinc-400 mb-1">Current Fuel Gauge</p>
+                   <p className="text-4xl font-accent font-bold text-black">{user.fuel || 0}%</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                <div className="bg-white hand-drawn shadow-sketch p-10 rotate-1">
+                   <h3 className="text-2xl font-accent font-bold mb-6 border-b-4 border-yellow-400 inline-block">LLM Key Matrix</h3>
+                   <div className="space-y-6">
+                      {['gemini', 'openai', 'anthropic', 'kimi', 'grok'].map((provider) => (
+                        <div key={provider} className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center justify-between">
+                            {provider} KEY
+                            {user.apiKeys?.[provider] && <span className="text-green-600 font-bold">[ SAVED ]</span>}
+                          </label>
+                          <div className="flex gap-2">
+                             <input 
+                              type="password"
+                              placeholder={`Enter ${provider} key...`}
+                              className="flex-1 bg-zinc-50 border-2 border-black p-2 text-sm font-bold outline-none focus:bg-yellow-50"
+                              onBlur={async (e) => {
+                                if (!e.target.value) return;
+                                try {
+                                  const res = await api.verifyKey(provider, e.target.value);
+                                  if (res.success) {
+                                    api.updateUser({ apiKeys: { ...user.apiKeys, [provider]: e.target.value } });
+                                    setNotification(`${provider.toUpperCase()} Key Inscribed! 🖊️`);
+                                    setTimeout(() => window.location.reload(), 1500);
+                                  } else {
+                                    alert('Invalid API key for ' + provider);
+                                  }
+                                } catch (err) {
+                                  alert('Verification failed');
+                                }
+                              }}
+                            />
+                            {user.apiKeys?.[provider] && (
+                              <button 
+                                onClick={() => {
+                                  const keys = { ...user.apiKeys };
+                                  delete (keys as any)[provider];
+                                  api.updateUser({ apiKeys: keys });
+                                  window.location.reload();
+                                }}
+                                className="p-2 border-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white transition-all font-bold"
+                              >
+                                X
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                   </div>
                 </div>
 
-                <div className="bg-white hand-drawn shadow-sketch p-6 md:p-8 text-center -rotate-1 relative overflow-hidden group">
+                <div className="space-y-8">
+                   <div className="bg-yellow-50 hand-drawn p-8 border-4 border-black -rotate-1">
+                      <h4 className="font-accent text-2xl font-bold mb-4 italic">The Fuel Logic 🧪</h4>
+                      <ul className="space-y-4 text-lg font-body list-disc pl-5">
+                        <li>Each generation costs 1 Fuel unit.</li>
+                        <li>Using your **own API key** bypasses free limits.</li>
+                        <li>Fuel recharges daily if you are on a Plan.</li>
+                        <li>Keep your keys secret like ink on a locked notebook.</li>
+                      </ul>
+                   </div>
+                   
+                   <div className="bg-white hand-drawn p-8 border-4 border-black rotate-1">
+                      <h4 className="font-accent text-xl font-bold mb-2">Need More?</h4>
+                      <p className="text-zinc-500 font-body mb-6">If your fuel runs low, upgrade to Author tier for auto-refill.</p>
+                      <button onClick={() => setUpgradePlan('premium')} className="bg-black text-white font-bold w-full py-3 hover:shadow-sketch">Upgrade Fuel Tank</button>
+                   </div>
+                </div>
+              </div>
+            </section>
+
+            {/* 💰 PLANS & UPGRADE SECTION */}
+            <section className="relative">
+              <h2 className="text-4xl md:text-5xl font-accent font-bold mb-12"><span className="marker text-2xl md:text-3xl">Ink</span> Plans</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-12">
+                {/* FAQ / Help Desk */}
+                <div className="md:col-span-1 bg-white hand-drawn shadow-sketch p-10 rotate-1 flex flex-col">
+                  <h3 className="text-2xl font-accent font-bold mb-8 border-b-4 border-black pb-2 inline-block">Scribe Help Desk</h3>
+                  <div className="space-y-6 flex-1">
+                    <div>
+                      <p className="font-bold text-lg mb-1 italic">Q: How do I upgrade?</p>
+                      <p className="text-zinc-500 text-sm">Pick a plan, fill the request form, and our admin will manually verify your ink pulse.</p>
+                    </div>
+                    <div>
+                      <p className="font-bold text-lg mb-1 italic">Q: Is it automatic?</p>
+                      <p className="text-zinc-500 text-sm">Currently, we manually approve all scribes to ensure high-fidelity sessions.</p>
+                    </div>
+                    <div>
+                      <p className="font-bold text-lg mb-1 italic">Q: Refund Logic?</p>
+                      <p className="text-zinc-500 text-sm">Once the ink is on paper, it's permanent. Contact help if you have issues.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Plans */}
+                <div className="bg-white hand-drawn shadow-sketch p-8 text-center -rotate-1 relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-2 marker text-[10px] md:text-xs font-bold rotate-12 -mr-1 -mt-1 font-body">POPULAR</div>
                   <h3 className="text-2xl md:text-3xl font-accent font-bold mb-3 md:mb-4 group-hover:text-yellow-600 transition-colors">The Scribe</h3>
                   <p className="text-5xl md:text-6xl font-accent font-bold mb-6 md:mb-8 font-body">₹99</p>
+                  <ul className="text-left space-y-3 mb-10 text-sm font-bold opacity-60 px-4">
+                    <li>✓ 10 Deep Scribes / Day</li>
+                    <li>✓ High Fidelity Mode</li>
+                    <li>✓ PDF Exports enabled</li>
+                  </ul>
                   <button 
-                    onClick={handleComingSoon}
-                    className="w-full py-3 md:py-4 border-4 border-black font-bold text-lg md:text-xl hover:bg-black hover:text-white transition-all"
+                    onClick={() => setUpgradePlan('basic')}
+                    className="w-full py-4 border-4 border-black font-bold text-xl hover:bg-black hover:text-white transition-all shadow-[0_4px_0_0_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none"
                   >
-                    Upgrade
+                    Request Upgrade
                   </button>
                 </div>
 
-                <div className="bg-yellow-100 hand-drawn shadow-sketch p-6 md:p-8 text-center rotate-1 group">
+                <div className="bg-yellow-100 hand-drawn shadow-sketch p-8 text-center rotate-1 group">
                   <h3 className="text-2xl md:text-3xl font-accent font-bold mb-3 md:mb-4 group-hover:text-blue-600 transition-colors font-body">The Author</h3>
                   <p className="text-5xl md:text-6xl font-accent font-bold mb-6 md:mb-8 font-body">₹299</p>
+                  <ul className="text-left space-y-3 mb-10 text-sm font-bold opacity-60 px-4">
+                    <li>✓ Unlimited Deep Scribes</li>
+                    <li>✓ Full Reservoir Refill</li>
+                    <li>✓ 1-on-1 Help Support</li>
+                  </ul>
                   <button 
-                    onClick={handleComingSoon}
-                    className="w-full py-3 md:py-4 bg-black text-white font-bold text-lg md:text-xl hover:bg-yellow-400 hover:text-black transition-all"
+                    onClick={() => setUpgradePlan('premium')}
+                    className="w-full py-4 bg-black text-white font-bold text-xl hover:shadow-sketch transition-all"
                   >
-                    Get Now
+                    Request Access
                   </button>
                 </div>
               </div>
             </section>
+
+            {/* 📜 PAYMENT HISTORY */}
+            <section className="pb-20">
+               <h2 className="text-3xl font-accent font-bold mb-8">Pulse History</h2>
+               <div className="bg-white hand-drawn shadow-sketch overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-zinc-50 border-b-4 border-black text-left">
+                       <tr>
+                          <th className="p-6 font-bold uppercase tracking-widest text-xs">Date</th>
+                          <th className="p-6 font-bold uppercase tracking-widest text-xs">Plan</th>
+                          <th className="p-6 font-bold uppercase tracking-widest text-xs">Status</th>
+                       </tr>
+                    </thead>
+                    <tbody className="divide-y-2 divide-zinc-100">
+                       <tr className="hover:bg-yellow-50 transition-colors">
+                          <td className="p-6 text-sm font-bold font-mono">Today</td>
+                          <td className="p-6 text-sm font-bold uppercase tracking-tighter">Initial Scribe</td>
+                          <td className="p-6"><span className="text-[10px] font-bold uppercase px-2 py-1 bg-green-100 text-green-700 border-2 border-green-700">Verified</span></td>
+                       </tr>
+                    </tbody>
+                  </table>
+               </div>
+            </section>
           </motion.div>
         )}
+
+        {/* 🛠️ UPGRADE MODAL */}
+        <AnimatePresence>
+          {upgradePlan && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+               <motion.div 
+                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                 className="absolute inset-0 bg-[#fffef0]/90 backdrop-blur-sm"
+                 onClick={() => setUpgradePlan(null)}
+               />
+               <motion.div 
+                 initial={{ scale: 0.9, y: 20 }}
+                 animate={{ scale: 1, y: 0 }}
+                 exit={{ scale: 0.9, y: 20 }}
+                 className="w-full max-w-xl bg-white hand-drawn border-4 border-black p-10 shadow-sketch relative z-10"
+               >
+                  <h2 className="text-4xl font-accent font-bold mb-2 uppercase">Request <span className="marker">Pulse</span></h2>
+                  <p className="text-zinc-500 italic mb-8">Finalizing your ink for {upgradePlan.toUpperCase()}</p>
+                  
+                  <form className="space-y-6" onSubmit={async (e) => {
+                    e.preventDefault();
+                    const formData = new FormData(e.currentTarget);
+                    await api.requestPayment(Object.fromEntries(formData));
+                    setNotification('Request Transmitted! Wait for Pulse. 🖊️');
+                    setUpgradePlan(null);
+                  }}>
+                     <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-widest">Name</label>
+                          <input name="name" readOnly defaultValue={user.name} className="w-full border-b-2 border-black bg-zinc-50 p-2 font-bold" />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-widest">Email</label>
+                          <input name="email" readOnly defaultValue={user.email} className="w-full border-b-2 border-zinc-200 bg-transparent p-2 text-zinc-400 font-bold" />
+                        </div>
+                     </div>
+
+                     <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-widest">Plan</label>
+                          <input name="plan" readOnly defaultValue={upgradePlan} className="w-full border-b-2 border-black bg-yellow-50 p-2 font-bold uppercase" />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-widest">Amount</label>
+                          <input name="amount" readOnly defaultValue={upgradePlan === 'basic' ? '99' : '299'} className="w-full border-b-2 border-black bg-zinc-50 p-2 font-bold" />
+                        </div>
+                     </div>
+
+                     <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-widest">Select Time Range</label>
+                        <select name="duration" className="w-full border-2 border-black p-3 font-bold bg-white">
+                           <option value="1 Month">1 Month Pulse</option>
+                           <option value="3 Months">3 Month Session</option>
+                           <option value="1 Year">Full Year Ledger</option>
+                        </select>
+                     </div>
+
+                     <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-widest">Custom Note / Transaction ID</label>
+                        <textarea name="message" placeholder="Paste your receipt info or any message here..." className="w-full border-2 border-black p-4 h-32 font-bold focus:bg-yellow-50 outline-none" required></textarea>
+                     </div>
+
+                     <button type="submit" className="w-full bg-black text-white py-5 font-bold text-2xl hover:bg-yellow-400 hover:text-black transition-all rotate-1">
+                        Transmit Pulse Request
+                     </button>
+                  </form>
+               </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Mobile Bottom Navigation */}
