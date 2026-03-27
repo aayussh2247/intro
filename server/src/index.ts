@@ -540,6 +540,28 @@ app.get('/api/admin/interviews', authenticate('admin'), async (req: any, res: Re
   }
 });
 
+app.get('/api/admin/setup', async (req: Request, res: Response) => {
+  try {
+    const adminExists = await User.findOne({ role: 'admin' });
+    if (adminExists) return res.status(403).json({ error: 'Admin already initialized' });
+    
+    // Create Default Admin
+    const hashedPassword = await bcrypt.hash('admin', 10);
+    const admin = await User.create({
+      name: 'Super Admin',
+      email: 'admin@intro.ai',
+      password: hashedPassword,
+      role: 'admin',
+      credits: 999,
+      fuel: 999
+    });
+    
+    res.json({ message: 'Default Admin Created', email: 'admin@intro.ai', password: 'admin' });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
