@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
-import Draggable from 'react-draggable';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Mic, 
@@ -9,18 +8,14 @@ import {
   Minimize2, 
   Copy, 
   CheckCircle2, 
-  Settings, 
-  FileText, 
   Bot, 
-  Expand, 
-  Shrink,
   Volume2,
   VolumeX,
   Send,
   Sparkles,
   Zap,
-  RotateCcw,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
@@ -37,7 +32,6 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [isFullScreen, setIsFullScreen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentTranscript, setCurrentTranscript] = useState('');
@@ -49,9 +43,12 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
   const [fuel, setFuel] = useState<number>(100);
   const [notification, setNotification] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
+  const [micStatus, setMicStatus] = useState<'idle' | 'active' | 'error' | 'starting'>('idle');
+  const [soundLevel, setSoundLevel] = useState(0);
 
   const isMutedRef = useRef(isMuted);
   const isListeningRef = useRef(isListening);
+  const shouldBeListeningRef = useRef(false);
 
   useEffect(() => {
     isMutedRef.current = isMuted;
@@ -63,6 +60,13 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const nodeRef = useRef<HTMLDivElement>(null);
+  const restartAttemptsRef = useRef(0);
+  const maxRestarts = 50; // Allow many restarts before giving up
+
+  // Audio context for visual feedback
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -94,97 +98,266 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  useEffect(() => {
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!recognitionRef.current) {
-        recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = true;
-        recognitionRef.current.interimResults = true;
-        recognitionRef.current.lang = 'en-US';
+  // Setup audio visualizer for mic feedback
+  const setupAudioVisualizer = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const analyser = audioContext.createAnalyser();
+      const source = audioContext.createMediaStreamSource(stream);
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      
+      audioContextRef.current = audioContext;
+      analyserRef.current = analyser;
 
-        recognitionRef.current.onresult = (event: any) => {
-          if (isMutedRef.current) return;
+      const updateLevel = () => {
+        if (!analyserRef.current) return;
+        const data = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(data);
+        const avg = data.reduce((a, b) => a + b, 0) / data.length;
+        setSoundLevel(Math.min(avg / 128, 1)); // Normalize 0-1
+        animFrameRef.current = requestAnimationFrame(updateLevel);
+      };
+      updateLevel();
+    } catch (e) {
+      console.error('Audio visualizer setup failed:', e);
+    }
+  }, []);
 
-          let interimTranscript = '';
-          let finalTranscript = '';
-
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript;
-            } else {
-              interimTranscript += event.results[i][0].transcript;
-            }
-          }
-
-          setCurrentTranscript(interimTranscript);
-
-          if (finalTranscript) {
-            transcriptBufferRef.current += ' ' + finalTranscript;
-            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-            silenceTimerRef.current = setTimeout(() => {
-              if (transcriptBufferRef.current.trim()) {
-                handleProcessQuestion(transcriptBufferRef.current.trim());
-                transcriptBufferRef.current = '';
-                setCurrentTranscript('');
-              }
-            }, 800); // Wait for full question to complete
-          }
-        };
-
-        recognitionRef.current.lang = 'en-IN'; // Better for Hinglish/Indian accents
-
-        recognitionRef.current.onerror = (event: any) => {
-          if (event.error === 'aborted') return;
-          console.error('Speech recognition error', event.error);
-          if (event.error === 'not-allowed') {
-            setIsListening(false);
-            // This is likely the 'listening' problem they have
-            setNotification('Microphone Blocked 🎤! Please check browser permissions.');
-          }
-        };
-
-        recognitionRef.current.onend = () => {
-          if (isListeningRef.current) {
-            setTimeout(() => {
-                try {
-                    recognitionRef.current.start();
-                } catch (e) {
-                    console.error('Restart error', e);
-                }
-            }, 300); // 300ms delay for more robust browser restarts
-          }
-        };
-      }
+  // Initialize Speech Recognition
+  const initRecognition = useCallback(() => {
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      setNotification('⚠️ Speech Recognition not supported in this browser. Use Chrome/Edge.');
+      setMicStatus('error');
+      return null;
     }
 
-    return () => {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-IN'; // Better for Indian accent + Hinglish
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      console.log('[MIC] Recognition started');
+      setMicStatus('active');
+      restartAttemptsRef.current = 0;
     };
-  }, [isListening, isMuted]);
+
+    recognition.onresult = (event: any) => {
+      if (isMutedRef.current) return;
+
+      let interimTranscript = '';
+      let finalTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      // Show interim results in real-time
+      if (interimTranscript) {
+        setCurrentTranscript(transcriptBufferRef.current + ' ' + interimTranscript);
+      }
+
+      if (finalTranscript) {
+        transcriptBufferRef.current += ' ' + finalTranscript;
+        setCurrentTranscript(transcriptBufferRef.current);
+        
+        // Reset silence timer - wait 2 seconds for complete sentence
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = setTimeout(() => {
+          if (transcriptBufferRef.current.trim()) {
+            const fullQuestion = transcriptBufferRef.current.trim();
+            console.log('[MIC] Sending complete question:', fullQuestion);
+            handleProcessQuestion(fullQuestion);
+            transcriptBufferRef.current = '';
+            setCurrentTranscript('');
+          }
+        }, 2000); // 2 seconds silence = question complete
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('[MIC] Error:', event.error);
+      
+      if (event.error === 'aborted') {
+        // Expected when we manually stop - don't show error
+        return;
+      }
+      
+      if (event.error === 'not-allowed') {
+        setMicStatus('error');
+        setIsListening(false);
+        shouldBeListeningRef.current = false;
+        setNotification('🎤 Microphone blocked! Allow mic access in browser settings.');
+        return;
+      }
+      
+      if (event.error === 'no-speech') {
+        // Normal - no speech detected, will auto-restart
+        console.log('[MIC] No speech detected, continuing...');
+        return;
+      }
+
+      if (event.error === 'network') {
+        setNotification('⚠️ Network error - check your internet connection.');
+        return;
+      }
+    };
+
+    recognition.onend = () => {
+      console.log('[MIC] Recognition ended, shouldBe:', shouldBeListeningRef.current);
+      
+      if (shouldBeListeningRef.current && restartAttemptsRef.current < maxRestarts) {
+        restartAttemptsRef.current++;
+        const delay = Math.min(300 * restartAttemptsRef.current, 2000);
+        
+        setTimeout(() => {
+          if (shouldBeListeningRef.current && recognitionRef.current) {
+            try {
+              console.log(`[MIC] Restarting (attempt ${restartAttemptsRef.current})...`);
+              recognitionRef.current.start();
+            } catch (e: any) {
+              console.error('[MIC] Restart failed:', e.message);
+              // If it's already started, that's fine
+              if (!e.message?.includes('already started')) {
+                setMicStatus('error');
+                setNotification('⚠️ Mic restart failed. Tap the mic button to retry.');
+              }
+            }
+          }
+        }, delay);
+      } else if (restartAttemptsRef.current >= maxRestarts) {
+        setMicStatus('error');
+        setIsListening(false);
+        shouldBeListeningRef.current = false;
+        setNotification('⚠️ Mic keeps disconnecting. Check permissions and try again.');
+      } else {
+        setMicStatus('idle');
+      }
+    };
+
+    return recognition;
+  }, []);
+
+  // Start listening
+  const startListening = useCallback(async () => {
+    console.log('[MIC] Starting...');
+    setMicStatus('starting');
+    
+    if (!recognitionRef.current) {
+      recognitionRef.current = initRecognition();
+    }
+    
+    if (!recognitionRef.current) return;
+
+    shouldBeListeningRef.current = true;
+    restartAttemptsRef.current = 0;
+
+    try {
+      recognitionRef.current.start();
+      setIsListening(true);
+      setupAudioVisualizer();
+    } catch (e: any) {
+      console.error('[MIC] Start error:', e.message);
+      if (e.message?.includes('already started')) {
+        setIsListening(true);
+        setMicStatus('active');
+      } else {
+        setMicStatus('error');
+        setNotification('⚠️ Could not start mic. Check browser permissions.');
+      }
+    }
+  }, [initRecognition, setupAudioVisualizer]);
+
+  // Stop listening
+  const stopListening = useCallback(() => {
+    console.log('[MIC] Stopping...');
+    shouldBeListeningRef.current = false;
+    
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        // Already stopped
+      }
+    }
+    
+    setIsListening(false);
+    setMicStatus('idle');
+    
+    // Process any remaining buffer
+    if (transcriptBufferRef.current.trim()) {
+      handleProcessQuestion(transcriptBufferRef.current.trim());
+      transcriptBufferRef.current = '';
+      setCurrentTranscript('');
+    }
+
+    // Cleanup audio visualizer
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+    }
+  }, []);
+
+  // Toggle listening
+  const toggleListening = useCallback(() => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  }, [isListening, startListening, stopListening]);
+
+  // Toggle mute (keeps mic running but ignores input)
+  const toggleMute = useCallback(() => {
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    isMutedRef.current = newMuted;
+    
+    if (newMuted) {
+      // Clear any pending buffer when muting
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      transcriptBufferRef.current = '';
+      setCurrentTranscript('');
+      setNotification('🔇 Muted - Mic paused');
+    } else {
+      setNotification('🔊 Unmuted - Listening again!');
+      // If not currently listening, auto-start
+      if (!isListening) {
+        startListening();
+      }
+    }
+    
+    // Auto-dismiss notification
+    setTimeout(() => setNotification(null), 2000);
+  }, [isMuted, isListening, startListening]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      shouldBeListeningRef.current = false;
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch(e) {}
+      }
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (audioContextRef.current) audioContextRef.current.close().catch(() => {});
+    };
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, currentTranscript]);
-
-  const toggleListening = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-      if (transcriptBufferRef.current.trim()) {
-        handleProcessQuestion(transcriptBufferRef.current.trim());
-        transcriptBufferRef.current = '';
-        setCurrentTranscript('');
-      }
-    } else {
-      try {
-        recognitionRef.current?.start();
-        setIsListening(true);
-      } catch (e) {
-        console.error('Start error', e);
-      }
-    }
-  };
 
   const handleProcessQuestion = async (question: string) => {
     if (!question) return;
@@ -199,13 +372,13 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
     setMessages(prev => [...prev, newQuestionMsg]);
     setIsProcessing(true);
 
-    // Auto-scroll to the top of this new thread
     setTimeout(() => {
       const el = document.getElementById(`thread-${newQuestionMsg.id}`);
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }, 100);
+
     try {
       const res = await api.generateAIResponse(question, resumeContext, provider);
       const answerText = res.text;
@@ -254,6 +427,9 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
   };
 
   const handleEndSession = async () => {
+    // Stop recognition first
+    stopListening();
+    
     if (messages.length === 0) {
       onClose();
       return;
@@ -274,19 +450,11 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
         language: 'en'
       });
 
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      
       setTimeout(() => {
         onClose();
       }, 500);
     } catch (error: any) {
       console.error('Error saving session:', error);
-      // Still close the session even if save fails
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
       setTimeout(() => {
         onClose();
       }, 500);
@@ -310,6 +478,26 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
       y += (text.length * 5) + 5;
     });
     doc.save('interview-sketch.pdf');
+  };
+
+  // Mic status indicator color
+  const getMicColor = () => {
+    switch (micStatus) {
+      case 'active': return isMuted ? 'bg-yellow-500' : 'bg-green-500';
+      case 'starting': return 'bg-blue-500';
+      case 'error': return 'bg-red-500';
+      default: return 'bg-zinc-500';
+    }
+  };
+
+  const getMicStatusText = () => {
+    if (isMuted) return '[ MUTED ] Tap unmute to listen';
+    switch (micStatus) {
+      case 'active': return '🟢 LIVE — Listening actively';
+      case 'starting': return '🔵 Starting mic...';
+      case 'error': return '🔴 Mic error — tap to retry';
+      default: return '⚫ Mic off — tap to start';
+    }
   };
 
   return (
@@ -339,29 +527,30 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
         <div className="flex items-center gap-4 px-2">
           {!isMinimized && (
             <div className="flex items-center gap-2">
-              <div className={cn("w-1.5 h-1.5 rounded-full", isListening ? "bg-red-500 animate-pulse" : "bg-zinc-600")} />
-              <span className="text-[10px] font-black uppercase tracking-widest opacity-60">
-                {isListening ? 'Pulse Active' : 'Pulse Muted'}
+              <div className={cn("w-2.5 h-2.5 rounded-full transition-colors", getMicColor(), micStatus === 'active' && !isMuted && "animate-pulse")} />
+              <span className="text-[10px] font-black uppercase tracking-widest opacity-80">
+                {isMuted ? 'Muted' : micStatus === 'active' ? 'LIVE 🎙️' : micStatus === 'starting' ? 'Starting...' : 'Offline'}
               </span>
               {isListening && !isMuted && (
-                 <div className="flex gap-0.5 ml-1">
-                    <motion.div animate={{ height: [2, 8, 4] }} transition={{ repeat: Infinity, duration: 0.5 }} className="w-0.5 bg-red-500 rounded-full" />
-                    <motion.div animate={{ height: [4, 2, 8] }} transition={{ repeat: Infinity, duration: 0.7 }} className="w-0.5 bg-red-400 rounded-full" />
-                    <motion.div animate={{ height: [8, 4, 2] }} transition={{ repeat: Infinity, duration: 0.6 }} className="w-0.5 bg-red-500 rounded-full" />
+                 <div className="flex gap-0.5 ml-1 items-end h-3">
+                    <motion.div animate={{ height: [2, 8 + soundLevel * 8, 4] }} transition={{ repeat: Infinity, duration: 0.4 }} className="w-0.5 bg-green-500 rounded-full" />
+                    <motion.div animate={{ height: [4, 2, 8 + soundLevel * 6] }} transition={{ repeat: Infinity, duration: 0.5 }} className="w-0.5 bg-green-400 rounded-full" />
+                    <motion.div animate={{ height: [6, 4 + soundLevel * 8, 2] }} transition={{ repeat: Infinity, duration: 0.3 }} className="w-0.5 bg-green-500 rounded-full" />
+                    <motion.div animate={{ height: [3, 7 + soundLevel * 6, 5] }} transition={{ repeat: Infinity, duration: 0.6 }} className="w-0.5 bg-green-400 rounded-full" />
                  </div>
               )}
             </div>
           )}
           {!isMinimized && isProcessing && (
-            <div className="flex items-center gap-2 animate-pulse">
-              <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+            <div className="flex items-center gap-2">
+              <Loader2 size={12} className="animate-spin text-yellow-400" />
               <span className="text-[10px] font-black uppercase tracking-widest text-yellow-400">Thinking...</span>
             </div>
           )}
           {!isMinimized && !isProcessing && messages.length > 0 && messages[messages.length-1].role === 'assistant' && (
              <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-green-500">Answering</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-green-500">Ready</span>
             </div>
           )}
         </div>
@@ -392,12 +581,22 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
         </div>
       ) : (
         <>
+          {/* Mic Status Banner - always visible */}
+          <div className={cn(
+            "px-4 py-2 text-center text-[10px] font-black uppercase tracking-widest transition-all shrink-0",
+            isMuted ? "bg-yellow-100 text-yellow-800" :
+            micStatus === 'active' ? "bg-green-100 text-green-800" : 
+            micStatus === 'error' ? "bg-red-100 text-red-800" :
+            "bg-zinc-100 text-zinc-600"
+          )}>
+            {getMicStatusText()}
+          </div>
+
           {/* Main Workspace - Adaptive Layout */}
           <div className="flex-1 flex flex-col lg:flex-row overflow-hidden bg-white paper-dots font-body selection:bg-yellow-300">
             {/* Threaded Conversations */}
             <div className="flex-1 overflow-y-auto p-3 lg:p-8 custom-scrollbar space-y-8 lg:space-y-12">
               <div className="max-w-4xl mx-auto space-y-12 pb-60">
-                {/* We need to group messages by pairing transcript and following assistant response */}
                 {(() => {
                   const threads: { q?: Message; a?: Message }[] = [];
                   let currentThread: { q?: Message; a?: Message } = {};
@@ -424,10 +623,8 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       className="group relative"
-                      // Data attribute for scroll targeting
                       id={thread.q ? `thread-${thread.q.id}` : undefined}
                     >
-                      {/* Spline Wavy Thread (SVG) */}
                       <div className="absolute left-4 lg:left-8 top-10 bottom-0 w-4 group-last:hidden overflow-hidden opacity-5 lg:opacity-10 pointer-events-none">
                          <svg width="20" height="100%" viewBox="0 0 20 100" preserveAspectRatio="none">
                             <path 
@@ -442,7 +639,6 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
                       </div>
                       
                       <div className="space-y-4">
-                        {/* Question (from Mic) */}
                         {thread.q && (
                           <div className="flex items-start gap-3 lg:gap-6 max-w-[95%] lg:max-w-[80%]">
                              <div className="w-8 h-8 lg:w-12 lg:h-12 shrink-0 bg-white border-2 border-black flex items-center justify-center font-bold text-[10px] lg:text-xs rotate-[-3deg] shadow-[2px_2px_0_0_rgba(0,0,0,1)]">
@@ -530,9 +726,17 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
                 })()}
 
                 {currentTranscript && (
-                  <div className="p-4 lg:p-6 bg-zinc-50 border-2 border-black border-dashed opacity-50 max-w-[85%] rotate-1">
-                    <p className="text-[11px] lg:text-lg font-medium italic">"{currentTranscript}..."</p>
-                  </div>
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="p-4 lg:p-6 bg-green-50 border-2 border-green-400 border-dashed max-w-[85%] rotate-1"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                      <span className="text-[9px] font-black uppercase tracking-widest text-green-600">Hearing you...</span>
+                    </div>
+                    <p className="text-[11px] lg:text-lg font-medium italic text-green-900">"{currentTranscript}..."</p>
+                  </motion.div>
                 )}
 
                 {isProcessing && (
@@ -559,8 +763,8 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
                     
                     {!isListening && (
                        <button 
-                         onClick={toggleListening}
-                         className="px-12 py-5 bg-black text-white font-bold text-2xl hover:bg-yellow-400 hover:text-black transition-all rotate-[-1deg] hand-drawn shadow-sketch uppercase"
+                         onClick={startListening}
+                         className="px-12 py-5 bg-black text-white font-bold text-2xl hover:bg-yellow-400 hover:text-black transition-all rotate-[-1deg] hand-drawn shadow-sketch uppercase active:scale-95"
                        >
                          START NOW [ SYNC ]
                        </button>
@@ -571,38 +775,64 @@ export function InterviewAssistant({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
-          {/* Floating Controls Overlay */}
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[90%] flex items-center gap-3 z-50">
-             <div className="flex-1 flex gap-2 p-2 bg-white/40 backdrop-blur-2xl border-2 border-black/5 rounded-[30px] shadow-2xl ring-1 ring-black/5">
-                <button 
-                  onClick={() => setIsMuted(!isMuted)}
-                  className={cn(
-                    "flex-1 py-4 rounded-full font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2",
-                    isMuted 
-                      ? "bg-yellow-400 text-black shadow-lg" 
-                      : "bg-white/80 text-black hover:bg-white"
-                  )}
-                >
-                  {isMuted ? <VolumeX size={18}/> : <Volume2 size={18}/>}
-                  {isMuted ? 'Unmute' : 'Mute'}
-                </button>
-                <button 
-                  onClick={handleEndSession}
-                  className="flex-1 py-4 rounded-full bg-red-600 text-white font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg hover:bg-red-700"
-                >
-                   <X size={18}/>
-                   End
-                </button>
-             </div>
-             
-             {!isListening && (
-                <button 
-                  onClick={toggleListening}
-                  className="p-5 bg-black text-white rounded-full shadow-2xl active:scale-90 transition-all border-4 border-white"
-                >
-                   <Mic size={24}/>
-                </button>
-             )}
+          {/* Bottom Controls - Always visible */}
+          <div className="absolute bottom-0 left-0 right-0 z-50 pb-4 px-3">
+            {/* Manual Text Input - Always visible */}
+            <div className="flex gap-2 mb-3 max-w-[90%] mx-auto">
+              <input
+                type="text"
+                value={manualInput}
+                onChange={(e) => setManualInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleManualSend()}
+                placeholder="Type a question manually..."
+                className="flex-1 px-4 py-3 bg-white/90 backdrop-blur-xl border-2 border-black/10 rounded-full text-xs font-medium focus:border-black focus:outline-none transition-all shadow-lg"
+              />
+              <button
+                onClick={handleManualSend}
+                disabled={!manualInput.trim()}
+                className="p-3 bg-black text-white rounded-full shadow-lg disabled:opacity-30 active:scale-90 transition-all hover:bg-yellow-400 hover:text-black"
+              >
+                <Send size={16} />
+              </button>
+            </div>
+            
+            {/* Main Controls */}
+            <div className="flex items-center gap-3 max-w-[90%] mx-auto">
+               <div className="flex-1 flex gap-2 p-2 bg-white/40 backdrop-blur-2xl border-2 border-black/5 rounded-[30px] shadow-2xl ring-1 ring-black/5">
+                  <button 
+                    onClick={toggleMute}
+                    className={cn(
+                      "flex-1 py-4 rounded-full font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2",
+                      isMuted 
+                        ? "bg-yellow-400 text-black shadow-lg" 
+                        : "bg-white/80 text-black hover:bg-white"
+                    )}
+                  >
+                    {isMuted ? <VolumeX size={18}/> : <Volume2 size={18}/>}
+                    {isMuted ? 'Unmute' : 'Mute'}
+                  </button>
+                  <button 
+                    onClick={handleEndSession}
+                    className="flex-1 py-4 rounded-full bg-red-600 text-white font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg hover:bg-red-700"
+                  >
+                     <X size={18}/>
+                     End
+                  </button>
+               </div>
+               
+               {/* Mic Toggle Button */}
+               <button 
+                 onClick={toggleListening}
+                 className={cn(
+                   "p-5 rounded-full shadow-2xl active:scale-90 transition-all border-4",
+                   isListening 
+                     ? "bg-green-500 text-white border-green-300 animate-pulse" 
+                     : "bg-black text-white border-white hover:bg-green-500"
+                 )}
+               >
+                  {isListening ? <Mic size={24}/> : <MicOff size={24}/>}
+               </button>
+            </div>
           </div>
         </>
       )}

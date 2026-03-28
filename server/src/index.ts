@@ -457,123 +457,195 @@ app.delete('/api/interviews/:id', async (req: Request, res: Response) => {
   }
 });
 
-// AI Endpoints
+// AI Endpoints — Multi-model fallback chain
+const GEMINI_MODELS = ['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-pro'];
+const ANTHROPIC_MODELS = ['claude-3-5-haiku-latest', 'claude-3-haiku-20240307'];
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const tryGeminiGenerate = async (client: any, prompt: string, systemInstruction: string): Promise<string> => {
+  for (const modelName of GEMINI_MODELS) {
+    try {
+      console.log(`[AI] Trying model: ${modelName}`);
+      const model = client.getGenerativeModel({ model: modelName, systemInstruction });
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      });
+      
+      let text = '';
+      if (result?.response?.text) {
+        text = result.response.text();
+      } else if (result?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        text = result.candidates[0].content.parts[0].text;
+      }
+      
+      if (text) {
+        console.log(`[AI] ✅ Success with model: ${modelName}`);
+        return text;
+      }
+    } catch (e: any) {
+      const msg = e.message || '';
+      if (msg.includes('404') || msg.includes('not found') || msg.includes('not supported')) {
+        console.log(`[AI] Model ${modelName} not available, trying next...`);
+        continue;
+      }
+      if (msg.includes('429') || msg.includes('quota') || msg.includes('rate')) {
+        console.log(`[AI] Model ${modelName} rate limited, trying next...`);
+        continue;
+      }
+      throw e;
+    }
+  }
+  return '';
+};
+
+const tryAnthropicGenerate = async (apiKey: string, prompt: string): Promise<string> => {
+  for (const modelName of ANTHROPIC_MODELS) {
+    try {
+      console.log(`[AI] Trying Anthropic model: ${modelName}`);
+      const anthropic = new Anthropic({ apiKey });
+      const message = await anthropic.messages.create({
+        model: modelName,
+        max_tokens: 1024,
+        system: SYSTEM_INSTRUCTION,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      
+      const text = message.content
+        .filter((block: any) => block.type === 'text')
+        .map((block: any) => block.text)
+        .join('\n');
+      
+      if (text) {
+        console.log(`[AI] ✅ Success with Anthropic model: ${modelName}`);
+        return text;
+      }
+    } catch (e: any) {
+      console.log(`[AI] Anthropic model ${modelName} failed:`, e.message);
+      continue;
+    }
+  }
+  return '';
+};
+
 app.post('/api/ai/generate', authenticate(), async (req: any, res: Response) => {
   console.log('[API] /api/ai/generate request received');
   const { question, resumeContext, provider: incomingProvider } = req.body;
   const provider = (incomingProvider || AI_PROVIDER || 'gemini') as string;
   
-  console.log(`[API] Provider: ${provider}, Question: "${question.substring(0, 30)}..."`);
+  console.log(`[API] Provider: ${provider}, Question: "${(question || '').substring(0, 50)}..."`);
   
+  try {
+    const prompt = `
+      You are an Elite AI interview copilot providing HIGH-FIDELITY, DEEP help.
+      AUDIO TRANSCRIPT (INTERVIEWER): "${question}"
+      
+      CANDIDATE'S RESUME & CONTEXT: ${resumeContext ? resumeContext : 'None'}
+      
+      CORE RULES:
+      1. If the transcript is the candidate speaking (answering/agreeing), respond with: IGNORE.
+      2. If it's a question, provide a SUBSTANTIAL, SOPHISTICATED, and THOROUGH answer (3-5 sentences).
+      3. Integrate specific details from the candidate's resume to make the answer grounded and exceptional.
+      4. DO NOT say "Candidate should say:". Just provide the final, ready-to-speak text.
+      5. Act as a senior professional in the field.
+    `;
+
+    let text = '';
+    const user = (req as any).user;
+
+    if (!user) {
+      console.error('[AI] No user object in request');
+      return res.status(401).json({ error: 'Identity matrix unreadable. Please re-sign.' });
+    }
+
+    // ---- STEP 1: Try Gemini with all available keys ----
+    const userGeminiKey = user?.apiKeys?.gemini;
+    let geminiClients: any[] = [];
+    
     try {
-      const prompt = `
-        You are an Elite AI interview copilot providing HIGH-FIDELITY, DEEP help.
-        AUDIO TRANSCRIPT (INTERVIEWER): "${question}"
+      if (GoogleGenerativeAI) {
+        // User's personal keys first
+        const userKeysList = (userGeminiKey || '').split(/[\s,]+/).map((k: string) => k.trim()).filter(Boolean);
+        const userClients = userKeysList.map((k: string) => {
+          try { return new GoogleGenerativeAI(k); } catch { return null; }
+        }).filter(Boolean);
         
-        CANDIDATE'S RESUME & CONTEXT: ${resumeContext ? resumeContext : 'None'}
+        // Server keys as fallback
+        const serverClients = getGeminiClients();
         
-        CORE RULES:
-        1. If the transcript is the candidate speaking (answering/agreeing), respond with: IGNORE.
-        2. If it's a question, provide a SUBSTANTIAL, SOPHISTICATED, and THOROUGH answer (3-5 sentences).
-        3. Integrate specific details from the candidate's resume to make the answer grounded and exceptional.
-        4. DO NOT say "Candidate should say:". Just provide the final, ready-to-speak text.
-        5. Act as a senior professional in the field.
-      `;
-
-      let text = '';
-      const user = (req as any).user;
-
-      if (!user) {
-          console.error('[AI] No user object in request');
-          return res.status(401).json({ error: 'Identity matrix unreadable. Please re-sign.' });
+        // Combine: user keys first, then server keys
+        geminiClients = [...userClients, ...serverClients];
       }
+    } catch (e) {
+      console.error('[AI Core Init Error]:', (e as Error).message);
+    }
 
-      const userKey = user?.apiKeys?.[provider];
-
-      let geminiClients: any[] = [];
+    // Try each Gemini client
+    let lastError: any;
+    for (let i = 0; i < geminiClients.length; i++) {
       try {
-        if (!GoogleGenerativeAI) {
-            throw new Error('Matrix connection still calibrating. Retry in 2 seconds.');
-        }
-        
-        // Smarter parsing for Super-Keys (handles commas, spaces, and newlines)
-        const keysList = (userKey || '').split(/[\s,]+/).map((k: string) => k.trim()).filter(Boolean);
-        
-        geminiClients = keysList.map((k: string) => {
-              try {
-                return new GoogleGenerativeAI(k);
-              } catch (e) {
-                console.error('[AI Init Error] Key failed:', k.substring(0, 5) + '...', (e as Error).message);
-                return null;
-              }
-            }).filter(Boolean);
-            
-        if (geminiClients.length === 0) {
-            geminiClients = getGeminiClients();
-        }
-      } catch (e) {
-        console.error('[AI Core Init Error]:', (e as Error).message);
+        console.log(`[AI] Testing Gemini Key #${i + 1}...`);
+        text = await tryGeminiGenerate(geminiClients[i], prompt, SYSTEM_INSTRUCTION);
+        if (text) break;
+      } catch (err) {
+        lastError = err;
+        console.error(`[AI Gemini Key #${i + 1} Error]:`, (err as Error).message);
       }
+    }
 
-      if (geminiClients.length === 0) {
-          throw new Error('No valid Pulse-Keys detected. Matrix connection severed.');
-      }
+    // ---- STEP 2: Fallback to Anthropic/Claude if Gemini failed ----
+    if (!text) {
+      console.log('[AI] All Gemini keys failed. Trying Anthropic fallback...');
+      
+      // Try user's anthropic key first, then server's
+      const anthropicKeys = [
+        user?.apiKeys?.anthropic,
+        process.env.ANTHROPIC_API_KEY
+      ].filter(Boolean);
 
-      let lastError: any;
-      for (let i = 0; i < geminiClients.length; i++) {
+      for (const aKey of anthropicKeys) {
         try {
-          const client = geminiClients[i];
-          console.log(`[AI] Testing Key #${i+1}...`);
-          
-          let model = client.getGenerativeModel({
-            model: 'gemini-1.5-flash',
-            systemInstruction: SYSTEM_INSTRUCTION
-          });
-
-          let result;
-          try {
-            result = await model.generateContent({
-              contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            });
-          } catch (e: any) {
-            if (e.message.includes('404') || e.message.includes('model not found')) {
-               console.log(`[AI] Fallback from 1.5-flash to gemini-pro for key #${i+1}`);
-               model = client.getGenerativeModel({
-                 model: 'gemini-pro',
-                 systemInstruction: SYSTEM_INSTRUCTION
-               });
-               result = await model.generateContent({
-                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
-               });
-            } else {
-               throw e;
-            }
-          }
-          
-          if (result && result.response && result.response.text) {
-            text = result.response.text();
-          } else if (result.candidates && result.candidates[0]?.content?.parts?.[0]?.text) {
-            text = result.candidates[0].content.parts[0].text;
-          }
-          
-          if (text) {
-             console.log('[AI] Success with Key #' + (i+1));
-             break;
-          }
+          text = await tryAnthropicGenerate(aKey, prompt);
+          if (text) break;
         } catch (err) {
           lastError = err;
-          console.error(`[AI Key #${i+1} Error]:`, (err as Error).message);
+          console.error('[AI Anthropic Error]:', (err as Error).message);
         }
       }
-      
-      if (!text && lastError) throw lastError;
-      if (!text) throw new Error('No response generated from any key.');
-
-      res.json({ text, fuel: user?.fuel });
-    } catch (err) {
-      console.error('CRITICAL AI ERROR:', (err as Error).message);
-      res.status(500).json({ error: (err as Error).message });
     }
+
+    // ---- STEP 3: If 429 on Gemini, wait and retry once ----
+    if (!text && lastError?.message?.includes('429')) {
+      console.log('[AI] Rate limited on all keys, waiting 12s for retry...');
+      await sleep(12000);
+      
+      for (let i = 0; i < Math.min(geminiClients.length, 2); i++) {
+        try {
+          text = await tryGeminiGenerate(geminiClients[i], prompt, SYSTEM_INSTRUCTION);
+          if (text) break;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+    }
+
+    if (!text && lastError) throw lastError;
+    if (!text) throw new Error('All AI providers exhausted. Add a fresh API key in your profile settings.');
+
+    res.json({ text, fuel: user?.fuel });
+  } catch (err) {
+    console.error('CRITICAL AI ERROR:', (err as Error).message);
+    const errMsg = (err as Error).message || 'AI is not responding';
+    
+    // Give user-friendly error based on type
+    if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('rate')) {
+      res.status(429).json({ error: 'API quota exhausted on all keys. Please add a fresh Gemini API key in your profile, or wait a few minutes.' });
+    } else if (errMsg.includes('404') || errMsg.includes('not found')) {
+      res.status(500).json({ error: 'AI models unavailable. Server configuration needs updating.' });
+    } else {
+      res.status(500).json({ error: errMsg });
+    }
+  }
 });
 
 app.post('/api/ai/summarize', authenticate(), async (req: any, res: Response) => {
@@ -584,30 +656,34 @@ app.post('/api/ai/summarize', authenticate(), async (req: any, res: Response) =>
     const prompt = `Summarize this interview session. Highlight key questions asked and areas for improvement.\n\nTranscript:\n${transcript}`;
 
     const geminiClients = getGeminiClients();
-    if (geminiClients.length === 0) {
-      return res.status(500).json({ error: 'GEMINI_API_KEY is not configured.' });
-    }
 
-    let lastError: any;
+    // Try Gemini first
     for (const client of geminiClients) {
       try {
-        const result = await (client as any).models.generateContent({
-          model: 'gemini-2.0-flash-lite',
-          contents: [{ role: 'user', parts: [{ text: prompt }] }]
-        });
-        summary = (result.text || '').trim();
+        summary = await tryGeminiGenerate(client, prompt, 'You are a helpful assistant that summarizes interview sessions.');
         if (summary) break;
       } catch (err) {
         console.error('Gemini Summarization Key Fail, trying next...', (err as Error).message);
-        lastError = err;
       }
     }
 
-    if (!summary && lastError) throw lastError;
+    // Fallback to Anthropic
+    if (!summary && process.env.ANTHROPIC_API_KEY) {
+      try {
+        summary = await tryAnthropicGenerate(process.env.ANTHROPIC_API_KEY, prompt);
+      } catch (err) {
+        console.error('Anthropic Summarization Fail:', (err as Error).message);
+      }
+    }
+
+    if (!summary) {
+      summary = 'Session saved but summary generation failed. All API keys are exhausted.';
+    }
+
     res.json({ summary });
   } catch (err) {
     console.error('AI Summarization Error:', err);
-    res.status(500).json({ error: 'Failed to summarize' });
+    res.json({ summary: 'Session saved but summary could not be generated.' });
   }
 });
 
