@@ -2,11 +2,8 @@ import express, { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
-// import { GoogleGenerativeAI } from '@google/generative-ai';
-let GoogleGenerativeAI: any;
-import('@google/generative-ai').then(mod => {
-  GoogleGenerativeAI = mod.GoogleGenerativeAI;
-});
+// Use require for synchronous load — dynamic import() was causing race conditions
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 import nodemailer from 'nodemailer';
 import axios from 'axios';
 import bcrypt from 'bcryptjs';
