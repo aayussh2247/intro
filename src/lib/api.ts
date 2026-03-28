@@ -1,4 +1,7 @@
-const rawApiUrl = import.meta.env.VITE_API_URL || 'https://intro-ai-backend.onrender.com';
+const rawApiUrl = import.meta.env.VITE_API_URL || 
+  (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+    ? `http://localhost:5000` 
+    : 'https://intro-ai-backend.onrender.com');
 const API_BASE_URL = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`;
 
 // Debug logging for API configuration
@@ -186,7 +189,7 @@ export const api = {
     }
     return res.json();
   },
-  verifyKey: async (provider: string, key: string) => {
+  verifyKey: async (provider: string | null, key: string) => {
     const res = await fetch(`${API_BASE_URL}/user/verify-key`, {
       method: 'POST',
       headers: { 

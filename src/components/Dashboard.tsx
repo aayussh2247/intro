@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bot, FileText, Plus, Settings, Trash2, Play, LogOut, CreditCard, User } from 'lucide-react';
+import { Bot, FileText, Plus, Settings, Trash2, Play, LogOut, CreditCard, User, Zap, Mic, MicOff, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -26,11 +26,13 @@ export function Dashboard({
   onLaunchAssistant: () => void 
 }) {
   const [interviews, setInterviews] = useState<Interview[]>([]);
-  const [resumeText, setResumeText] = useState<string>(user.resumeText || '');
   const [loadingResume, setLoadingResume] = useState(false);
-  const [activeTab, setActiveTab] = useState<'interviews' | 'resume' | 'profile'>('interviews');
+  const [activeTab, setActiveTab] = useState<'mind' | 'live' | 'fuel' | 'profile'>('mind');
   const [notification, setNotification] = useState<string | null>(null);
   const [upgradePlan, setUpgradePlan] = useState<'basic' | 'premium' | null>(null);
+  const [omniKey, setOmniKey] = useState('');
+  const [building, setBuilding] = useState(false);
+  const [selectedDefaultModel, setSelectedDefaultModel] = useState<string>(user.preferredProvider || 'gemini');
 
   useEffect(() => {
     if (notification) {
@@ -77,12 +79,8 @@ export function Dashboard({
 
       const updatedResumes = [...(user.resumes || []), newResume];
       await api.updateUser({ resumes: updatedResumes });
-      
-      // Update local user state if possible, or just refresh/wait for parent update
-      // For now, let's assume we need to refresh or the parent handles it.
-      // But usually we'd want to update the local 'user' prop if we can.
-      // Since 'user' is a prop, we should ideally have an 'onUserUpdate' callback.
-      window.location.reload(); // Quickest way to sync state for now without refactoring too much
+      setNotification('Context Absorbed! 🖊️');
+      setTimeout(() => window.location.reload(), 1500);
     } catch (error) {
       console.error('Error parsing PDF:', error);
       alert('Failed to parse PDF. Please try again.');
@@ -102,554 +100,542 @@ export function Dashboard({
     }
   };
 
-  const handleDeleteInterview = async (id: string) => {
-    if (!confirm('Tear this session from the notebook?')) return;
-    try {
-      await api.deleteInterview(id);
-      setInterviews(prev => prev.filter(i => i.id !== id));
-    } catch (error) {
-      console.error('Failed to delete interview:', error);
-    }
-  };
-
   const [newName, setNewName] = useState(user.name);
   const handleUpdateProfile = async () => {
     try {
       await api.updateUser({ name: newName });
-      setNotification('Identity updated on the paper! 🖋️');
+      setNotification('Identity updated! 🖋️');
       setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
       console.error('Update error', err);
     }
   };
+  
+  const handleSetDefaultModel = async (model: string) => {
+    try {
+      await api.updateUser({ preferredProvider: model });
+      setSelectedDefaultModel(model);
+      setNotification(`${model.toUpperCase()} set as default! 🚀`);
+    } catch (err) {
+      alert('Failed to set default model');
+    }
+  };
 
-  const handleComingSoon = () => {
-    setNotification('Feature coming soon to your notebook! 🖋️');
+  const handleBuildSystem = async () => {
+    if (!omniKey) {
+      setNotification('Please enter an API key! 🖊️');
+      return;
+    }
+    setBuilding(true);
+    try {
+      const res = await api.verifyKey(null, omniKey);
+      if (res.success) {
+        const provider = res.provider;
+        await api.updateUser({ 
+          apiKeys: { ...user.apiKeys, [provider]: omniKey },
+          preferredProvider: provider
+        });
+        setNotification(`System Synchronized with ${provider.toUpperCase()}! 🚀`);
+        setTimeout(() => window.location.reload(), 2000);
+      }
+    } catch (err: any) {
+      setNotification(`Calibration Failed: ${err.message || 'Key invalid or blocked.'} ⚠️`);
+    } finally {
+      setBuilding(false);
+    }
   };
 
   return (
-    <div className="min-h-screen paper-dots text-black flex flex-col md:flex-row font-body selection:bg-yellow-300">
+    <div className="min-h-screen paper-dots text-black flex flex-col lg:flex-row font-body selection:bg-yellow-300">
       <AnimatePresence>
         {notification && (
           <motion.div 
             initial={{ y: -100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -100, opacity: 0 }}
-            className="fixed top-20 md:top-8 left-1/2 -translate-x-1/2 z-[100] bg-yellow-400 border-4 border-black hand-drawn px-8 py-3 font-bold shadow-sketch"
+            className="fixed top-20 lg:top-8 left-1/2 -translate-x-1/2 z-[100] bg-yellow-400 border-4 border-black hand-drawn px-8 py-3 font-bold shadow-sketch whitespace-nowrap"
           >
             {notification}
           </motion.div>
         )}
       </AnimatePresence>
-      {/* Sidebar (Desktop) */}
-      <div className="hidden md:flex w-80 border-r-4 border-black p-8 flex-col bg-white">
-        <div className="flex items-center gap-3 mb-16">
-          <span className="font-accent text-5xl font-bold italic">
-            <span className="marker">INTRO</span> AI
-          </span>
-        </div>
 
-        <nav className="flex-1 space-y-8">
-          <button
-            onClick={() => setActiveTab('interviews')}
-            className={cn(
-              "w-full text-left font-accent text-3xl font-bold transition-all relative group",
-              activeTab === 'interviews' ? "text-black underline decoration-yellow-400 decoration-8 underline-offset-4" : "text-zinc-400 hover:text-black"
-            )}
-          >
-            . Sessions
-          </button>
-          <button
-            onClick={() => setActiveTab('resume')}
-            className={cn(
-              "w-full text-left font-accent text-3xl font-bold transition-all relative",
-              activeTab === 'resume' ? "text-black underline decoration-yellow-400 decoration-8 underline-offset-4" : "text-zinc-400 hover:text-black"
-            )}
-          >
-            . My Resumes
-          </button>
-          <button
-            onClick={() => setActiveTab('profile')}
-            className={cn(
-              "w-full text-left font-accent text-3xl font-bold transition-all relative",
-              activeTab === 'profile' ? "text-black underline decoration-yellow-400 decoration-8 underline-offset-4" : "text-zinc-400 hover:text-black"
-            )}
-          >
-            . Profile
-          </button>
-        </nav>
+      {/* DESKTOP SIDEBAR (lg and up) */}
+      <div className="hidden lg:flex w-80 h-screen border-r-4 border-black p-10 flex-col bg-white sticky top-0 shrink-0">
+         <div className="mb-20">
+            <h2 className="font-accent text-5xl font-bold italic">
+               <span className="marker">INTRO</span> AI
+            </h2>
+            <p className="text-[10px] font-black uppercase opacity-30 mt-2 tracking-widest">Personal Scribe Terminal</p>
+         </div>
 
-        <div className="mt-auto space-y-10">
-          <div className="p-6 bg-white hand-drawn rotate-1">
-            <span className="text-sm font-bold uppercase tracking-widest block mb-2">Practice Ink</span>
-            <p className="text-5xl font-accent font-bold tracking-tighter">
-              {user?.credits || 0} <span className="text-xl">Left</span>
-            </p>
-          </div>
+         <nav className="flex-1 space-y-10">
+            {[
+              { id: 'mind', label: 'Mind Repository', icon: FileText },
+              { id: 'live', label: 'Live Session', icon: Play },
+              { id: 'fuel', label: 'Fuel & Matrix', icon: Zap },
+              { id: 'profile', label: 'Scribe Profile', icon: User }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={cn(
+                  "w-full text-left font-accent text-3xl font-bold transition-all flex items-center gap-4 group",
+                  activeTab === tab.id ? "text-black translate-x-2" : "text-zinc-300 hover:text-black"
+                )}
+              >
+                <tab.icon className={cn("w-8 h-8", activeTab === tab.id ? "text-black" : "text-zinc-200")} />
+                <span className={cn(activeTab === tab.id ? "underline decoration-yellow-400 decoration-8 underline-offset-4" : "")}>
+                  {tab.id.toUpperCase()}
+                </span>
+              </button>
+            ))}
+         </nav>
 
-          <button 
-            onClick={onLogout}
-            className="w-full text-left font-accent text-2xl font-bold text-red-600 hover:underline"
-          >
-            [ Sign Out ]
-          </button>
-        </div>
+         <div className="mt-auto space-y-8">
+            <div className="p-6 bg-yellow-50 hand-drawn -rotate-1 shadow-sketch">
+               <span className="text-[10px] font-black uppercase tracking-widest block mb-2 opacity-50">Pulse Gauge</span>
+               <div className="text-3xl font-accent font-bold">
+                  {(user.apiKeys?.gemini || user.apiKeys?.anthropic) ? '∞ Unlimited' : `${user.fuel || 0}% Fuel`}
+               </div>
+            </div>
+            <button 
+              onClick={onLogout}
+              className="w-full text-left font-accent text-2xl font-bold text-red-600 hover:underline hover:translate-x-1 transition-all"
+            >
+              [ Sign Out ]
+            </button>
+         </div>
       </div>
 
-      {/* Mobile Header */}
-      <div className="md:hidden flex items-center justify-between p-4 bg-white border-b-4 border-black sticky top-0 z-50">
+      {/* MOBILE HEADER (hidden on lg) */}
+      <div className="lg:hidden flex items-center justify-between p-4 bg-white border-b-4 border-black sticky top-0 z-50">
         <span className="font-accent text-3xl font-bold italic">
           <span className="marker px-2 text-2xl">INTRO</span> AI
         </span>
-        <button onClick={onLogout} className="p-2 bg-red-50 border-2 border-black rounded-sm active:translate-y-0.5 transition-transform">
-          <LogOut className="w-5 h-5 text-red-600" />
-        </button>
+        <div className="w-8 h-8 rounded-full border-2 border-black flex items-center justify-center font-bold text-xs bg-yellow-400">
+           {user.name?.[0]}
+        </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 p-5 md:p-16 overflow-y-auto pb-40 md:pb-16 custom-scrollbar">
-        {activeTab === 'interviews' && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="max-w-4xl mx-auto space-y-12"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-8 mb-4">
-              <div>
-                <h1 className="text-5xl md:text-6xl font-accent font-bold leading-tight">
-                  <span className="marker text-3xl md:text-4xl leading-none">Activity</span> Log
-                </h1>
-                <p className="text-zinc-500 text-lg md:text-xl italic mt-1 font-body">Recent interview doodles.</p>
-              </div>
-              <button
-                onClick={onLaunchAssistant}
-                className="w-full sm:w-auto bg-black text-white font-bold text-xl md:text-2xl px-8 md:px-10 py-4 md:py-5 hover:shadow-sketch active:translate-y-1 transition-all hand-drawn"
-              >
-                + Start Session
-              </button>
-            </div>
-
-            <div className="grid gap-10">
-              {interviews.length === 0 ? (
-                <div className="bg-white hand-drawn shadow-sketch p-16 text-center rotate-1">
-                  <h3 className="text-4xl font-accent font-bold text-zinc-300">Clean Sheet...</h3>
-                  <p className="text-zinc-400 mt-2 text-xl font-body">Click the marker to start your first session.</p>
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto pb-32 lg:pb-16 custom-scrollbar">
+        {/* Container for centering content on desktop */}
+        <div className="max-w-4xl mx-auto">
+          {activeTab === 'mind' && (
+            <motion.div 
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="p-6 lg:p-12 space-y-12"
+            >
+              <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+                <div>
+                  <h1 className="text-5xl lg:text-7xl font-accent font-bold leading-none">
+                    <span className="marker lg:text-5xl">Mind</span> Repository
+                  </h1>
+                  <p className="text-zinc-500 text-lg lg:text-2xl italic mt-2 font-body">Manage multiple context sources.</p>
                 </div>
-              ) : (
-                interviews.map((interview, idx) => (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.05 }}
-                    key={interview.id}
-                    className="bg-white hand-drawn shadow-sketch p-8 group relative"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-accent text-3xl font-bold group-hover:text-blue-900 transition-colors">
-                           {interview.title}
-                        </h3>
-                        <p className="text-zinc-400 text-sm italic mt-2">
-                           Scribed on {new Date(interview.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteInterview(interview.id)}
-                        className="p-3 text-red-200 hover:text-red-600 transition-colors"
-                      >
-                        <Trash2 className="w-6 h-6" />
-                      </button>
+                <div className="text-[10px] lg:text-xs font-black uppercase opacity-40 font-body">V2.4 — SYNC ACTIVE</div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16">
+                <div className="bg-white hand-drawn shadow-sketch p-8 rotate-1">
+                  <h2 className="text-3xl font-accent font-bold mb-8 italic">Attach Context</h2>
+                  <label className="flex flex-col items-center justify-center w-full h-56 border-4 border-black border-dashed cursor-pointer hover:bg-yellow-50 transition-all group">
+                    <div className="flex flex-col items-center justify-center">
+                      {loadingResume ? (
+                        <div className="w-12 h-12 border-4 border-zinc-200 border-t-black rounded-full animate-spin mb-4" />
+                      ) : (
+                        <div className="text-6xl text-zinc-200 group-hover:text-black mb-4 transition-colors">+</div>
+                      )}
+                      <p className="font-bold text-xl text-zinc-400 group-hover:text-black transition-colors">Drop Resume PDF</p>
                     </div>
-                    {interview.summary && (
-                      <div className="mt-8 p-6 bg-yellow-50/50 border-l-8 border-yellow-400 text-xl font-body italic leading-relaxed">
-                        "{interview.summary}"
-                      </div>
-                    )}
-                  </motion.div>
-                ))
-              )}
-            </div>
-          </motion.div>
-        )}
+                    <input type="file" className="hidden" accept="application/pdf" onChange={handleFileUpload} disabled={loadingResume} />
+                  </label>
+                </div>
 
-        {activeTab === 'resume' && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="max-w-4xl mx-auto space-y-8 md:space-y-12"
-          >
-            <div>
-              <h1 className="text-5xl md:text-6xl font-accent font-bold"><span className="marker text-3xl md:text-4xl">Brain</span> Dump</h1>
-              <p className="text-zinc-500 text-base md:text-xl italic mt-1 font-body">Upload resumes for AI training.</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
-              <div className="space-y-8">
-                <h2 className="text-3xl font-accent font-bold border-b-4 border-black pb-2 inline-block">Active Source</h2>
                 <div className="space-y-6">
+                  <h3 className="text-2xl font-accent font-bold border-b-4 border-black pb-2 inline-block">Active Memories</h3>
                   {(user.resumes || []).length === 0 ? (
-                    <div className="p-12 bg-white hand-drawn border-dashed border-4 border-zinc-200 text-center">
-                      <p className="text-zinc-400 text-xl">The AI knows nothing yet.</p>
+                    <div className="p-12 bg-white border-2 border-dashed border-zinc-100 text-center rounded-2xl">
+                      <p className="text-zinc-300 italic text-xl">The AI knows nothing yet.</p>
                     </div>
                   ) : (
-                    user.resumes.map((res: any) => (
-                      <div key={res.id} className="bg-white hand-drawn p-6 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <FileText className="w-8 h-8 text-black" />
-                          <div>
-                            <p className="font-bold text-xl">{res.name}</p>
-                            <p className="text-xs uppercase tracking-tighter text-zinc-400">Memory Loaded</p>
-                          </div>
-                        </div>
-                        <button 
-                          onClick={() => handleDeleteResume(res.id)}
-                          className="text-red-300 hover:text-red-600 p-2"
+                    <div className="grid gap-4">
+                      {user.resumes.map((res: any) => (
+                        <motion.div 
+                          key={res.id} 
+                          layout
+                          className="bg-white hand-drawn p-5 flex items-center justify-between border-2 border-black hover:rotate-0 transition-transform shadow-[4px_4px_0_0_rgba(0,0,0,1)]"
                         >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
-                    ))
+                            <div className="flex items-center gap-4">
+                              <div className="p-2 bg-yellow-50 border border-black rotate-[-4deg]">
+                                <FileText className="w-6 h-6 text-black" />
+                              </div>
+                              <div>
+                                <p className="font-bold text-lg leading-tight">{res.name}</p>
+                                <p className="text-[10px] uppercase text-zinc-400 font-black tracking-tighter">
+                                  Buffer Active {res.id ? `[ ${res.id.slice(0,4)} ]` : '[ NEW ]'}
+                                </p>
+                              </div>
+                            </div>
+                          <button 
+                            onClick={() => handleDeleteResume(res.id)}
+                            className="text-red-200 hover:text-red-600 p-2 transition-colors"
+                          >
+                            <Trash2 className="w-6 h-6" />
+                          </button>
+                        </motion.div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
+            </motion.div>
+          )}
 
-              <div className="bg-white hand-drawn shadow-sketch p-10 rotate-1">
-                 <h2 className="text-3xl font-accent font-bold mb-8">Add Context</h2>
-                 <label className="flex flex-col items-center justify-center w-full h-56 border-4 border-black border-dashed cursor-pointer hover:bg-yellow-50 transition-all group">
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    {loadingResume ? (
-                      <div className="w-12 h-12 border-4 border-zinc-200 border-t-black rounded-full animate-spin mb-4" />
-                    ) : (
-                      <div className="text-6xl text-zinc-300 group-hover:text-black mb-4">+</div>
-                    )}
-                    <p className="font-bold text-xl text-zinc-500 group-hover:text-black">Drop PDF Here</p>
+          {activeTab === 'live' && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="p-6 lg:p-12 space-y-12"
+            >
+              <div>
+                <h1 className="text-5xl lg:text-7xl font-accent font-bold leading-none">
+                  <span className="marker lg:text-5xl">Live</span> Session
+                </h1>
+                <p className="text-zinc-500 text-lg lg:text-2xl italic mt-2 font-body">Real-time interview support terminal.</p>
+              </div>
+
+              <div className="bg-white hand-drawn shadow-sketch p-12 lg:p-20 text-center rotate-1 relative overflow-hidden group">
+                <div className="absolute inset-0 paper-dots opacity-20 pointer-events-none" />
+                <Bot className="w-24 h-24 mx-auto mb-10 text-black/10 group-hover:text-black/20 transition-colors group-hover:scale-110 duration-500" />
+                <h3 className="text-4xl font-accent font-bold mb-4">Initial Pulse Detected</h3>
+                <p className="text-zinc-400 mb-12 font-body text-xl max-w-md mx-auto italic">The scribe is ready to analyze audio signals and output high-fidelity responses based on your loaded Mind.</p>
+                <button
+                  onClick={onLaunchAssistant}
+                  className="w-full max-w-sm bg-black text-white font-bold text-3xl py-6 hover:shadow-sketch active:translate-y-2 transition-all hand-drawn rotate-[-1deg] mx-auto uppercase tracking-tighter"
+                >
+                  START NOW [ SYNC ]
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <h3 className="text-2xl font-accent font-bold border-b-4 border-black pb-2 inline-block">Session Log</h3>
+                {interviews.length === 0 ? (
+                  <p className="text-zinc-300 italic text-xl">No sessions recorded yet.</p>
+                ) : (
+                  <div className="grid gap-4">
+                    {interviews.map((interview) => (
+                      <div key={interview.id} className="bg-white border-2 border-black p-6 flex flex-col lg:flex-row lg:items-center justify-between shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:bg-yellow-50 transition-colors">
+                         <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-black text-white flex items-center justify-center font-bold rotate-[-3deg]">
+                               {interview.title[0]}
+                            </div>
+                            <div>
+                               <div className="font-bold text-xl">{interview.title}</div>
+                               <div className="text-xs text-zinc-400 font-bold uppercase tracking-tighter">Scribed on {new Date(interview.createdAt).toLocaleDateString()}</div>
+                            </div>
+                         </div>
+                         <div className="mt-4 lg:mt-0 flex items-center gap-4">
+                            <span className="text-[10px] font-black uppercase text-green-600 px-2 py-1 bg-green-50 border border-green-200">Verified</span>
+                         </div>
+                      </div>
+                    ))}
                   </div>
-                  <input type="file" className="hidden" accept="application/pdf" onChange={handleFileUpload} disabled={loadingResume} />
-                </label>
+                )}
               </div>
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          )}
 
-        {activeTab === 'profile' && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="max-w-5xl mx-auto space-y-12 md:space-y-20"
-          >
-            {/* 🖊️ IDENTITY SECTION */}
-            <section>
-              <h1 className="text-5xl md:text-6xl font-accent font-bold"><span className="marker text-3xl md:text-4xl">Identity</span> Card</h1>
-              <p className="text-zinc-500 text-base md:text-xl italic mt-1 font-body">Manage your scribe profile.</p>
-              
-              <div className="mt-12 bg-white hand-drawn shadow-sketch p-8 md:p-12 flex flex-col md:flex-row gap-8 md:gap-16 items-center rotate-1">
-                <div className="w-40 h-40 border-4 border-black flex items-center justify-center -rotate-3 bg-yellow-100 flex-shrink-0 relative overflow-hidden">
-                   <div className="absolute top-0 left-0 w-full h-full paper-dots opacity-30"></div>
-                  <span className="text-8xl font-accent font-bold relative z-10">{user.name?.[0] || 'U'}</span>
-                </div>
-                
-                <div className="flex-1 w-full space-y-12">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                    <div className="space-y-4">
-                      <label className="text-sm font-bold uppercase tracking-widest text-zinc-400">Full Name</label>
-                      <input 
-                        type="text" 
-                        value={newName}
-                        onChange={(e) => setNewName(e.target.value)}
-                        className="w-full bg-transparent border-b-4 border-black py-3 text-2xl font-bold focus:outline-none focus:border-yellow-500"
-                      />
+          {activeTab === 'fuel' && (
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="p-6 lg:p-12 space-y-12"
+            >
+              <div>
+                <h1 className="text-5xl lg:text-7xl font-accent font-bold leading-none">
+                  <span className="marker lg:text-5xl">Fuel</span> & Matrix
+                </h1>
+                <p className="text-zinc-500 text-lg lg:text-2xl italic mt-2 font-body">Power source management.</p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                 {/* BIG FUEL GAUGE */}
+                 <div className="lg:col-span-2 bg-black text-white p-10 lg:p-16 relative overflow-hidden hand-drawn shadow-sketch -rotate-1">
+                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                       <Zap size={200} />
                     </div>
-                    <div className="space-y-4">
-                      <label className="text-sm font-bold uppercase tracking-widest text-zinc-400">Email (Permanent)</label>
-                      <input 
-                        type="email" 
-                        defaultValue={user.email} 
-                        className="w-full bg-transparent border-b-4 border-zinc-200 py-3 text-2xl font-bold text-zinc-300"
-                        disabled
-                      />
+                    <div className="relative z-10">
+                       <p className="text-[10px] lg:text-xs font-black uppercase tracking-[0.5em] mb-4 opacity-50">Current Reservoir Efficiency</p>
+                       <div className="flex items-baseline gap-4">
+                          <span className="text-7xl lg:text-9xl font-accent font-bold">
+                             {(user.apiKeys?.gemini || user.apiKeys?.anthropic) ? '∞' : `${user.fuel || 0}%`}
+                          </span>
+                          <span className="text-2xl lg:text-4xl font-accent font-bold opacity-40">FUEL</span>
+                       </div>
+                       <p className="mt-8 text-zinc-500 font-body text-xl max-w-lg">
+                          {(user.apiKeys?.gemini || user.apiKeys?.anthropic) 
+                            ? 'Your Matrix is directly synchronized with personal API keys. Free limits are bypassed.'
+                            : 'You are using public reservoir fuel. Please attach your own provider key for high-fidelity unlimited sessions.'}
+                       </p>
                     </div>
-                  </div>
-                  <button 
-                    onClick={handleUpdateProfile}
-                    className="bg-black text-white font-bold text-2xl px-12 py-4 hover:shadow-sketch active:translate-y-1 transition-all"
-                  >
-                    Save Changes
-                  </button>
-                </div>
-              </div>
-            </section>
+                 </div>
 
-            {/* 🔋 FUEL & API KEYS SECTION */}
-            <section className="relative">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h2 className="text-4xl md:text-5xl font-accent font-bold"><span className="marker text-2xl md:text-3xl">Fuel</span> & Keys</h2>
-                  <p className="text-zinc-500 text-base md:text-lg italic mt-1 font-body">Add your own power source for unlimited scribing.</p>
-                </div>
-                <div className="text-right hand-drawn bg-white p-4 -rotate-2">
-                   <p className="text-[10px] font-bold uppercase text-zinc-400 mb-1">Current Fuel Gauge</p>
-                   <p className="text-4xl font-accent font-bold text-black">{user.fuel || 0}%</p>
-                </div>
-              </div>
+                 <div className="space-y-10">
+                    <div className="bg-white hand-drawn border-2 border-black p-8 shadow-[6px_6px_0_0_rgba(0,0,0,1)]">
+                      <h3 className="text-xs font-black uppercase tracking-widest mb-6 border-b-2 border-black pb-2">Active Protocol</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        {[
+                          { id: 'gemini', label: 'GEMINI V1' },
+                          { id: 'anthropic', label: 'ANTHROPIC V1' }
+                        ].map((m) => (
+                          <button 
+                            key={m.id}
+                            onClick={() => handleSetDefaultModel(m.id)}
+                            className={cn(
+                              "py-4 lg:py-6 font-bold text-lg lg:text-xl border-2 transition-all",
+                              selectedDefaultModel === m.id ? "bg-black text-white border-black" : "bg-white text-zinc-300 border-zinc-100 hover:text-black hover:border-black"
+                            )}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                <div className="bg-white hand-drawn shadow-sketch p-10 rotate-1">
-                   <h3 className="text-2xl font-accent font-bold mb-6 border-b-4 border-yellow-400 inline-block">LLM Key Matrix</h3>
-                   <div className="space-y-6">
-                      {['gemini', 'openai', 'anthropic', 'kimi', 'grok'].map((provider) => (
-                        <div key={provider} className="space-y-2">
-                          <label className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center justify-between">
-                            {provider} KEY
-                            {user.apiKeys?.[provider] && <span className="text-green-600 font-bold">[ SAVED ]</span>}
-                          </label>
-                          <div className="flex gap-2">
-                             <input 
-                              type="password"
-                              placeholder={`Enter ${provider} key...`}
-                              className="flex-1 bg-zinc-50 border-2 border-black p-2 text-sm font-bold outline-none focus:bg-yellow-50"
-                              onBlur={async (e) => {
-                                if (!e.target.value) return;
-                                try {
-                                  const res = await api.verifyKey(provider, e.target.value);
-                                  if (res.success) {
-                                    api.updateUser({ apiKeys: { ...user.apiKeys, [provider]: e.target.value } });
-                                    setNotification(`${provider.toUpperCase()} Key Inscribed! 🖊️`);
-                                    setTimeout(() => window.location.reload(), 1500);
-                                  } else {
-                                    alert('Invalid API key for ' + provider);
-                                  }
-                                } catch (err) {
-                                  alert('Verification failed');
-                                }
-                              }}
-                            />
-                            {user.apiKeys?.[provider] && (
+                    <div className="bg-yellow-50 hand-drawn border-4 border-black p-8 shadow-sketch rotate-1">
+                      <h3 className="text-2xl font-accent font-bold mb-4 uppercase italic">Super-Key Protocol</h3>
+                      <div className="space-y-6">
+                        <div className="space-y-2">
+                           <label className="text-[10px] font-black uppercase tracking-widest opacity-40">Matrix Multi-Key [ Comma Separated ]</label>
+                           <textarea 
+                             placeholder="Paste your API keys here! You can add multiple keys (key1, key2, key3) to create a Super-Key and bypass all limits..."
+                             value={omniKey}
+                             onChange={(e) => setOmniKey(e.target.value)}
+                             className="w-full bg-white border-2 border-black p-4 font-mono text-[10px] focus:ring-4 focus:ring-yellow-300/50 outline-none h-24"
+                           />
+                        </div>
+                        <button 
+                          onClick={handleBuildSystem}
+                          disabled={building}
+                          className={cn(
+                            "w-full py-5 font-bold text-2xl transition-all border-4 border-black shadow-[4px_4px_0_0_rgba(0,0,0,1)] active:shadow-none active:translate-x-1 active:translate-y-1 uppercase tracking-widest",
+                            building ? "bg-zinc-200 text-zinc-400 cursor-wait" : "bg-black text-white"
+                          )}
+                        >
+                          {building ? 'Calibrating Super-Key...' : 'Sync Super-Key'}
+                        </button>
+                      </div>
+                    </div>
+                 </div>
+
+                 <div className="space-y-6">
+                    <h3 className="text-2xl font-accent font-bold border-b-4 border-black pb-2 inline-block">Matrix Summary</h3>
+                    <div className="grid gap-4">
+                       {['gemini', 'anthropic'].map(p => (
+                         <div key={p} className={cn(
+                           "p-6 border-2 border-black bg-white flex items-center justify-between transition-opacity",
+                           user.apiKeys?.[p] ? "opacity-100" : "opacity-40"
+                         )}>
+                            <div className="flex items-center gap-4">
+                               <div className={cn("w-4 h-4 rounded-full border-2 border-black", user.apiKeys?.[p] ? "bg-green-500" : "bg-zinc-200")} />
+                               <span className="font-bold text-xl uppercase font-accent">{p} Protocol</span>
+                            </div>
+                            {user.apiKeys?.[p] && (
                               <button 
-                                onClick={() => {
+                                onClick={async () => {
                                   const keys = { ...user.apiKeys };
-                                  delete (keys as any)[provider];
-                                  api.updateUser({ apiKeys: keys });
+                                  delete (keys as any)[p];
+                                  await api.updateUser({ apiKeys: keys });
                                   window.location.reload();
                                 }}
-                                className="p-2 border-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white transition-all font-bold"
+                                className="bg-red-50 text-red-600 hover:bg-black p-2 border border-red-200 transition-colors"
                               >
-                                X
+                                <Trash2 size={20}/>
                               </button>
                             )}
-                          </div>
+                         </div>
+                       ))}
+                    </div>
+                    <div className="p-6 bg-zinc-50 border-2 border-dashed border-zinc-200 rounded-xl mt-6 font-body italic text-zinc-500">
+                       <p>Note: Gemini keys typically start with 'AIza', Anthropic keys start with 'sk-ant'. The system will auto-detect your key type on sync.</p>
+                    </div>
+                 </div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'profile' && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-6 lg:p-12 space-y-16"
+            >
+              <div className="flex items-center gap-10">
+                <div className="w-32 h-32 lg:w-44 lg:h-44 border-4 lg:border-8 border-black bg-yellow-400 flex items-center justify-center font-accent text-7xl lg:text-9xl font-black -rotate-6 shadow-sketch shrink-0">
+                  {user.name?.[0] || 'U'}
+                </div>
+                <div>
+                  <h1 className="text-6xl lg:text-8xl font-accent font-bold leading-none">Profile</h1>
+                  <p className="text-zinc-500 text-xl lg:text-3xl italic mt-3 font-body">Manage your scribe identity.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 lg:gap-16 items-start">
+                {/* IDENTITY FORM */}
+                <div className="lg:col-span-2 space-y-12">
+                  <section className="bg-white hand-drawn border-2 border-black p-10 space-y-10 rotate-1 shadow-sketch">
+                    <h2 className="text-3xl font-accent font-bold border-b-4 border-black pb-2 inline-block italic">Identity Ledger</h2>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                      <div className="space-y-4">
+                        <label className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Full Scribe Name</label>
+                        <input 
+                          type="text" 
+                          value={newName}
+                          onChange={(e) => setNewName(e.target.value)}
+                          className="w-full bg-transparent border-b-4 border-black py-4 text-2xl lg:text-3xl font-bold focus:outline-none focus:border-yellow-500 transition-colors"
+                        />
+                      </div>
+                      <div className="space-y-4 opacity-50">
+                        <label className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Permanent Email</label>
+                        <input 
+                          type="email" 
+                          value={user.email}
+                          disabled
+                          className="w-full bg-transparent border-b-4 border-zinc-200 py-4 text-2xl lg:text-3xl font-bold cursor-not-allowed"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-6">
+                       <button 
+                        onClick={handleUpdateProfile}
+                        className="w-full bg-black text-white font-bold text-3xl py-6 hover:bg-yellow-400 hover:text-black transition-all flex items-center justify-center gap-4 rotate-[-0.5deg]"
+                      >
+                        Update Identity [ WRITE ]
+                      </button>
+                    </div>
+                  </section>
+
+                  <section className="bg-white border-4 border-black p-10 space-y-8 -rotate-1">
+                    <h2 className="text-3xl font-accent font-bold border-b-4 border-black pb-2 inline-block">Security Matrix</h2>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-end">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest opacity-40">Re-Inscribe Password</label>
+                        <input 
+                          type="password" 
+                          placeholder="••••••••"
+                          className="w-full bg-transparent border-b-4 border-black py-4 text-2xl font-bold focus:outline-none"
+                        />
+                      </div>
+                      <button 
+                        onClick={() => setNotification('Security credentials re-inscribed! 🔐')}
+                        className="bg-zinc-100 text-black border-4 border-black font-bold text-2xl py-4 hover:bg-black hover:text-white transition-all active:scale-95"
+                      >
+                        Change Password
+                      </button>
+                    </div>
+                  </section>
+                </div>
+
+                {/* PLANS & QUICK ACTIONS */}
+                <div className="space-y-10">
+                   <div className="bg-yellow-400 border-4 border-black p-8 shadow-sketch rotate-2 group">
+                      <h3 className="text-2xl font-accent font-bold mb-4 flex items-center gap-3">
+                         <CreditCard /> Plan: BASIC
+                      </h3>
+                      <p className="font-body text-black/60 mb-8 italic">Your notebook is currently on a legacy basic pulse.</p>
+                      <button onClick={() => setUpgradePlan('premium')} className="w-full bg-white text-black border-2 border-black font-bold py-4 hover:bg-black hover:text-white transition-all shadow-[4px_4px_0_0_rgba(0,0,0,1)] active:shadow-none translate-y-[-2px] active:translate-y-0">
+                         Upgrade Reservoir
+                      </button>
+                   </div>
+
+                   <div className="space-y-4">
+                      <button onClick={onLogout} className="w-full flex items-center justify-between p-8 border-4 border-black bg-red-50 text-red-600 hand-drawn active:translate-y-1 transition-all group">
+                        <div className="flex items-center gap-5">
+                          <LogOut size={32}/>
+                          <span className="font-accent text-3xl font-bold">Sign Out</span>
                         </div>
-                      ))}
+                        <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse group-hover:scale-150 transition-transform" />
+                      </button>
                    </div>
-                </div>
 
-                <div className="space-y-8">
-                   <div className="bg-yellow-50 hand-drawn p-8 border-4 border-black -rotate-1">
-                      <h4 className="font-accent text-2xl font-bold mb-4 italic">The Fuel Logic 🧪</h4>
-                      <ul className="space-y-4 text-lg font-body list-disc pl-5">
-                        <li>Each generation costs 1 Fuel unit.</li>
-                        <li>Using your **own API key** bypasses free limits.</li>
-                        <li>Fuel recharges daily if you are on a Plan.</li>
-                        <li>Keep your keys secret like ink on a locked notebook.</li>
-                      </ul>
-                   </div>
-                   
-                   <div className="bg-white hand-drawn p-8 border-4 border-black rotate-1">
-                      <h4 className="font-accent text-xl font-bold mb-2">Need More?</h4>
-                      <p className="text-zinc-500 font-body mb-6">If your fuel runs low, upgrade to Author tier for auto-refill.</p>
-                      <button onClick={() => setUpgradePlan('premium')} className="bg-black text-white font-bold w-full py-3 hover:shadow-sketch">Upgrade Fuel Tank</button>
+                   <div className="p-8 border-4 border-black border-dashed bg-white text-zinc-300 pointer-events-none">
+                      <p className="text-[10px] font-black uppercase tracking-widest mb-2">Notebook ID</p>
+                      <p className="font-mono text-[10px] break-all">ID-{user.id || Math.random().toString(36).slice(2)}</p>
                    </div>
                 </div>
               </div>
-            </section>
+            </motion.div>
+          )}
+        </div>
+      </div>
 
-            {/* 💰 PLANS & UPGRADE SECTION */}
-            <section className="relative">
-              <h2 className="text-4xl md:text-5xl font-accent font-bold mb-12"><span className="marker text-2xl md:text-3xl">Ink</span> Plans</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-12">
-                {/* FAQ / Help Desk */}
-                <div className="md:col-span-1 bg-white hand-drawn shadow-sketch p-10 rotate-1 flex flex-col">
-                  <h3 className="text-2xl font-accent font-bold mb-8 border-b-4 border-black pb-2 inline-block">Scribe Help Desk</h3>
-                  <div className="space-y-6 flex-1">
-                    <div>
-                      <p className="font-bold text-lg mb-1 italic">Q: How do I upgrade?</p>
-                      <p className="text-zinc-500 text-sm">Pick a plan, fill the request form, and our admin will manually verify your ink pulse.</p>
-                    </div>
-                    <div>
-                      <p className="font-bold text-lg mb-1 italic">Q: Is it automatic?</p>
-                      <p className="text-zinc-500 text-sm">Currently, we manually approve all scribes to ensure high-fidelity sessions.</p>
-                    </div>
-                    <div>
-                      <p className="font-bold text-lg mb-1 italic">Q: Refund Logic?</p>
-                      <p className="text-zinc-500 text-sm">Once the ink is on paper, it's permanent. Contact help if you have issues.</p>
-                    </div>
-                  </div>
-                </div>
+      {/* MOBILE FLOATING DOCK - 4 BUTTONS (hidden on lg) */}
+      <div className="lg:hidden fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] bg-white/60 backdrop-blur-xl border-2 border-black/5 flex items-center justify-between p-2 z-50 rounded-[40px] shadow-[0_20px_40px_-10px_rgba(0,0,0,0.1)] ring-1 ring-black/5">
+        {[
+          { id: 'mind', label: 'Mind', icon: FileText },
+          { id: 'live', label: 'Live', icon: Play },
+          { id: 'fuel', label: 'Fuel', icon: Zap },
+          { id: 'profile', label: 'User', icon: User }
+        ].map((btn) => (
+          <button 
+            key={btn.id}
+            onClick={() => setActiveTab(btn.id as any)} 
+            className="relative flex flex-col items-center justify-center p-3 transition-all active:scale-90 flex-1 overflow-hidden"
+          >
+             {activeTab === btn.id && (
+                <motion.div 
+                   layoutId="active-pill"
+                   className="absolute inset-0 bg-yellow-400 rounded-3xl -z-10"
+                   transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                />
+             )}
+            <btn.icon size={22} className={cn("transition-colors", activeTab === btn.id ? "text-black" : "text-zinc-400")} strokeWidth={activeTab === btn.id ? 2.5 : 2} />
+          </button>
+        ))}
+      </div>
 
-                {/* Plans */}
-                <div className="bg-white hand-drawn shadow-sketch p-8 text-center -rotate-1 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-2 marker text-[10px] md:text-xs font-bold rotate-12 -mr-1 -mt-1 font-body">POPULAR</div>
-                  <h3 className="text-2xl md:text-3xl font-accent font-bold mb-3 md:mb-4 group-hover:text-yellow-600 transition-colors">The Scribe</h3>
-                  <p className="text-5xl md:text-6xl font-accent font-bold mb-6 md:mb-8 font-body">₹99</p>
-                  <ul className="text-left space-y-3 mb-10 text-sm font-bold opacity-60 px-4">
-                    <li>✓ 10 Deep Scribes / Day</li>
-                    <li>✓ High Fidelity Mode</li>
-                    <li>✓ PDF Exports enabled</li>
-                  </ul>
-                  <button 
-                    onClick={() => setUpgradePlan('basic')}
-                    className="w-full py-4 border-4 border-black font-bold text-xl hover:bg-black hover:text-white transition-all shadow-[0_4px_0_0_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none"
-                  >
-                    Request Upgrade
-                  </button>
-                </div>
-
-                <div className="bg-yellow-100 hand-drawn shadow-sketch p-8 text-center rotate-1 group">
-                  <h3 className="text-2xl md:text-3xl font-accent font-bold mb-3 md:mb-4 group-hover:text-blue-600 transition-colors font-body">The Author</h3>
-                  <p className="text-5xl md:text-6xl font-accent font-bold mb-6 md:mb-8 font-body">₹299</p>
-                  <ul className="text-left space-y-3 mb-10 text-sm font-bold opacity-60 px-4">
-                    <li>✓ Unlimited Deep Scribes</li>
-                    <li>✓ Full Reservoir Refill</li>
-                    <li>✓ 1-on-1 Help Support</li>
-                  </ul>
-                  <button 
-                    onClick={() => setUpgradePlan('premium')}
-                    className="w-full py-4 bg-black text-white font-bold text-xl hover:shadow-sketch transition-all"
-                  >
-                    Request Access
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            {/* 📜 PAYMENT HISTORY */}
-            <section className="pb-20">
-               <h2 className="text-3xl font-accent font-bold mb-8">Pulse History</h2>
-               <div className="bg-white hand-drawn shadow-sketch overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-zinc-50 border-b-4 border-black text-left">
-                       <tr>
-                          <th className="p-6 font-bold uppercase tracking-widest text-xs">Date</th>
-                          <th className="p-6 font-bold uppercase tracking-widest text-xs">Plan</th>
-                          <th className="p-6 font-bold uppercase tracking-widest text-xs">Status</th>
-                       </tr>
-                    </thead>
-                    <tbody className="divide-y-2 divide-zinc-100">
-                       <tr className="hover:bg-yellow-50 transition-colors">
-                          <td className="p-6 text-sm font-bold font-mono">Today</td>
-                          <td className="p-6 text-sm font-bold uppercase tracking-tighter">Initial Scribe</td>
-                          <td className="p-6"><span className="text-[10px] font-bold uppercase px-2 py-1 bg-green-100 text-green-700 border-2 border-green-700">Verified</span></td>
-                       </tr>
-                    </tbody>
-                  </table>
-               </div>
-            </section>
-          </motion.div>
-        )}
-
-        {/* 🛠️ UPGRADE MODAL */}
-        <AnimatePresence>
+      {/* Upgrade Modal */}
+      <AnimatePresence>
           {upgradePlan && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                <motion.div 
                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                 className="absolute inset-0 bg-[#fffef0]/90 backdrop-blur-sm"
+                 className="absolute inset-0 bg-black/60 backdrop-blur-sm"
                  onClick={() => setUpgradePlan(null)}
                />
                <motion.div 
                  initial={{ scale: 0.9, y: 20 }}
                  animate={{ scale: 1, y: 0 }}
                  exit={{ scale: 0.9, y: 20 }}
-                 className="w-full max-w-xl bg-white hand-drawn border-4 border-black p-10 shadow-sketch relative z-10"
+                 className="w-full max-w-sm bg-white hand-drawn border-4 border-black p-6 shadow-sketch relative z-10"
                >
-                  <h2 className="text-4xl font-accent font-bold mb-2 uppercase">Request <span className="marker">Pulse</span></h2>
-                  <p className="text-zinc-500 italic mb-8">Finalizing your ink for {upgradePlan.toUpperCase()}</p>
+                  <h2 className="text-2xl font-accent font-bold mb-6 uppercase">Ink <span className="marker">Subscription</span></h2>
                   
-                  <form className="space-y-6" onSubmit={async (e) => {
-                    e.preventDefault();
-                    const formData = new FormData(e.currentTarget);
-                    await api.requestPayment(Object.fromEntries(formData));
-                    setNotification('Request Transmitted! Wait for Pulse. 🖊️');
-                    setUpgradePlan(null);
-                  }}>
-                     <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <label className="text-xs font-bold uppercase tracking-widest">Name</label>
-                          <input name="name" readOnly defaultValue={user.name} className="w-full border-b-2 border-black bg-zinc-50 p-2 font-bold" />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs font-bold uppercase tracking-widest">Email</label>
-                          <input name="email" readOnly defaultValue={user.email} className="w-full border-b-2 border-zinc-200 bg-transparent p-2 text-zinc-400 font-bold" />
-                        </div>
+                  <div className="space-y-4">
+                     <div className="p-4 border-2 border-black bg-yellow-50">
+                        <p className="font-bold text-lg">Author Tier</p>
+                        <p className="text-xs opacity-60">₹299/month • Unlimited Fuel</p>
                      </div>
-
-                     <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <label className="text-xs font-bold uppercase tracking-widest">Plan</label>
-                          <input name="plan" readOnly defaultValue={upgradePlan} className="w-full border-b-2 border-black bg-yellow-50 p-2 font-bold uppercase" />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs font-bold uppercase tracking-widest">Amount</label>
-                          <input name="amount" readOnly defaultValue={upgradePlan === 'basic' ? '99' : '299'} className="w-full border-b-2 border-black bg-zinc-50 p-2 font-bold" />
-                        </div>
-                     </div>
-
-                     <div className="space-y-2">
-                        <label className="text-xs font-bold uppercase tracking-widest">Select Time Range</label>
-                        <select name="duration" className="w-full border-2 border-black p-3 font-bold bg-white">
-                           <option value="1 Month">1 Month Pulse</option>
-                           <option value="3 Months">3 Month Session</option>
-                           <option value="1 Year">Full Year Ledger</option>
-                        </select>
-                     </div>
-
-                     <div className="space-y-2">
-                        <label className="text-xs font-bold uppercase tracking-widest">Custom Note / Transaction ID</label>
-                        <textarea name="message" placeholder="Paste your receipt info or any message here..." className="w-full border-2 border-black p-4 h-32 font-bold focus:bg-yellow-50 outline-none" required></textarea>
-                     </div>
-
-                     <button type="submit" className="w-full bg-black text-white py-5 font-bold text-2xl hover:bg-yellow-400 hover:text-black transition-all rotate-1">
-                        Transmit Pulse Request
+                     <p className="text-[10px] font-bold italic text-zinc-400">Upgrade request will be sent to admin.</p>
+                     <button 
+                       onClick={() => {
+                         setNotification('Upgrade Request Sent! 🖋️');
+                         setUpgradePlan(null);
+                       }}
+                       className="w-full bg-black text-white py-4 font-bold text-xl hover:bg-yellow-400 hover:text-black transition-all"
+                     >
+                        Confirm Request
                      </button>
-                  </form>
+                  </div>
                </motion.div>
             </div>
           )}
         </AnimatePresence>
-      </div>
-
-      {/* Mobile Bottom Navigation */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-4 border-black flex items-center justify-around p-4 z-50 bottom-nav-safe">
-        <button 
-          onClick={() => setActiveTab('interviews')} 
-          className={cn(
-            "flex flex-col items-center gap-1 font-accent text-2xl font-bold transition-transform active:scale-90", 
-            activeTab === 'interviews' ? "text-black" : "text-zinc-300"
-          )}
-        >
-          <div className={cn("w-2 h-2 rounded-full border border-black", activeTab === 'interviews' ? "bg-black" : "bg-transparent")} />
-          Log
-        </button>
-        <button 
-          onClick={() => setActiveTab('resume')} 
-          className={cn(
-            "flex flex-col items-center gap-1 font-accent text-2xl font-bold transition-transform active:scale-90", 
-            activeTab === 'resume' ? "text-black" : "text-zinc-300"
-          )}
-        >
-          <div className={cn("w-2 h-2 rounded-full border border-black", activeTab === 'resume' ? "bg-black" : "bg-transparent")} />
-          Brain
-        </button>
-        <button 
-          onClick={() => setActiveTab('profile')} 
-          className={cn(
-            "flex flex-col items-center gap-1 font-accent text-2xl font-bold transition-transform active:scale-90", 
-            activeTab === 'profile' ? "text-black" : "text-zinc-300"
-          )}
-        >
-          <div className={cn("w-2 h-2 rounded-full border border-black", activeTab === 'profile' ? "bg-black" : "bg-transparent")} />
-          Me
-        </button>
-      </div>
     </div>
   );
 }

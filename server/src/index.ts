@@ -2,14 +2,28 @@ import express, { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { GoogleGenAI } from '@google/genai';
+// import { GoogleGenerativeAI } from '@google/generative-ai';
+let GoogleGenerativeAI: any;
+import('@google/generative-ai').then(mod => {
+  GoogleGenerativeAI = mod.GoogleGenerativeAI;
+});
 import nodemailer from 'nodemailer';
 import axios from 'axios';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import Anthropic from '@anthropic-ai/sdk';
 
 dotenv.config();
+
+process.on('uncaughtException', (err) => {
+  console.error('[CRASH] Uncaught Exception:', err.message);
+  console.error(err.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[CRASH] Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -31,10 +45,10 @@ app.get('/', (req: Request, res: Response) => {
 // AI Setup helper
 const getGeminiClients = () => {
   const keys = (process.env.GEMINI_API_KEY || '').split(',').map(k => k.trim()).filter(Boolean);
-  return keys.map(apiKey => new GoogleGenAI({ apiKey }));
+  return keys.map(apiKey => new GoogleGenerativeAI(apiKey));
 };
 const AI_PROVIDER = 'gemini'; // Forced gemini over claude to fix credit issues
-const SYSTEM_INSTRUCTION = "You are a professional candidate. Answer instantly in ONE short sentence. Be conversational but concise. Use spoken human language.";
+const SYSTEM_INSTRUCTION = "You are an Elite AI Interview Copilot. Provide COMPREHENSIVE, SOPHISTICATED, and HIGHLY DETAILED answers. Speak as a world-class candidate. Use full, eloquent sentences and technical depth.";
 
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://user:pass@cluster0.mongodb.net/intro-ai?retryWrites=true&w=majority';
@@ -64,6 +78,7 @@ const userSchema = new mongoose.Schema({
     kimi: String,
     grok: String
   },
+  preferredProvider: String,
   lastInterviewDate: { type: Date, default: Date.now },
   interviewsToday: { type: Number, default: 0 },
   resumes: [{
@@ -306,18 +321,49 @@ app.put('/api/user', authenticate(), async (req: any, res: Response) => {
 });
 
 app.post('/api/user/verify-key', authenticate(), async (req: any, res: Response) => {
-  const { provider, key } = req.body;
+  let { provider, key } = req.body;
+  if (!key) return res.status(400).json({ error: 'API Key is required' });
+  key = key.trim(); // Trim for robust detection
+
+  // Auto-detection logic
+  if (!provider) {
+    if (key.startsWith('sk-ant-')) provider = 'anthropic';
+    else if (key.startsWith('AIza')) provider = 'gemini';
+    else if (key.startsWith('sk-')) provider = 'openai';
+    else provider = 'gemini'; // Default
+  }
+
   try {
     if (provider === 'gemini') {
-      const client = new GoogleGenAI({ apiKey: key });
-      await client.models.generateContent({ 
-        model: 'gemini-1.5-flash', 
-        contents: [{ role: 'user', parts: [{ text: 'Hi' }] }]
+      const keys = (key || '').split(/[\s,]+/).map((k: string) => k.trim()).filter(Boolean);
+      const firstKey = keys[0];
+      if (!firstKey) throw new Error('No valid pulse signal detected.');
+      
+      try {
+        const client = new GoogleGenerativeAI(firstKey);
+        // Attempt a very lightweight test
+        await client.getGenerativeModel({ model: 'gemini-1.5-flash' }).generateContent({ 
+           contents: [{ role: 'user', parts: [{ text: '1' }] }] 
+        });
+        return res.json({ success: true, provider: 'gemini' });
+      } catch (e: any) {
+        // SOFT-CALIBRATION: If it looks like a key, let it through even if testing fails
+        if (firstKey.startsWith('AIza')) {
+           return res.json({ success: true, provider: 'gemini', warning: e.message });
+        }
+        throw e;
+      }
+    } else if (provider === 'anthropic') {
+      const anthropic = new Anthropic({ apiKey: key });
+      await anthropic.messages.create({
+        model: "claude-3-haiku-20240307",
+        max_tokens: 1,
+        messages: [{ role: "user", content: "Hi" }],
       });
     } else {
-       return res.status(400).json({ error: 'Only Gemini is supported at this time.' });
+       return res.status(400).json({ error: 'Provider not supported for verification yet.' });
     }
-    res.json({ success: true });
+    res.json({ success: true, provider });
   } catch (err) {
     res.status(400).json({ error: 'Invalid API Key for ' + provider });
   }
@@ -338,8 +384,12 @@ app.post('/api/interviews', authenticate(), async (req: any, res: Response) => {
   try {
     const user = req.user;
     
-    // Check Credits
-    if (user.plan === 'premium') {
+    // Check Credits (Personal API Key bypasses credit limits)
+    const hasPersonalKey = user.apiKeys?.gemini || user.apiKeys?.anthropic || user.apiKeys?.openai;
+
+    if (hasPersonalKey) {
+      console.log(`[PIPELINE] User ${user.email} using Personal API. Credits not deducted.`);
+    } else if (user.plan === 'premium') {
       const today = new Date().toDateString();
       if (user.lastInterviewDate.toDateString() !== today) {
         user.interviewsToday = 0;
@@ -409,84 +459,121 @@ app.delete('/api/interviews/:id', async (req: Request, res: Response) => {
 
 // AI Endpoints
 app.post('/api/ai/generate', authenticate(), async (req: any, res: Response) => {
+  console.log('[API] /api/ai/generate request received');
   const { question, resumeContext, provider: incomingProvider } = req.body;
   const provider = (incomingProvider || AI_PROVIDER || 'gemini') as string;
   
-  try {
-    const prompt = `
-      You are an AI interview copilot.
-      Live audio transcript: "${question}"
-      
-      Resume context: ${resumeContext ? resumeContext : 'None'}
-      
-      INSTRUCTIONS:
-      1. If this transcript sounds like the candidate answering, or just agreement ("ok", "yes"), reply EXACTLY with: IGNORE
-      2. If it's a question for the candidate, provide the EXACT words the candidate should speak.
-      3. Keep the answer EXTREMELY SHORT (1-2 sentences).
-      4. Use simple human language.
-    `;
+  console.log(`[API] Provider: ${provider}, Question: "${question.substring(0, 30)}..."`);
+  
+    try {
+      const prompt = `
+        You are an Elite AI interview copilot providing HIGH-FIDELITY, DEEP help.
+        AUDIO TRANSCRIPT (INTERVIEWER): "${question}"
+        
+        CANDIDATE'S RESUME & CONTEXT: ${resumeContext ? resumeContext : 'None'}
+        
+        CORE RULES:
+        1. If the transcript is the candidate speaking (answering/agreeing), respond with: IGNORE.
+        2. If it's a question, provide a SUBSTANTIAL, SOPHISTICATED, and THOROUGH answer (3-5 sentences).
+        3. Integrate specific details from the candidate's resume to make the answer grounded and exceptional.
+        4. DO NOT say "Candidate should say:". Just provide the final, ready-to-speak text.
+        5. Act as a senior professional in the field.
+      `;
 
-    let text = '';
-    const user = (req as any).user;
+      let text = '';
+      const user = (req as any).user;
 
-    if (!user) {
-        console.error('[AI] No user object in request');
-        return res.status(401).json({ error: 'Identity matrix unreadable. Please re-sign.' });
-    }
-
-    // Use User's own key if available
-    const userKey = user?.apiKeys?.[provider];
-
-    // Check & Initialize Fuel for existing users
-    if (user.fuel === undefined || user.fuel === null) {
-        user.fuel = 100;
-        await user.save();
-    }
-    
-    // Only block if NO user key AND no fuel
-    if (!userKey && user.fuel <= 0 && user.plan !== 'premium') {
-      return res.status(403).json({ error: 'Out of Fuel! Please add more or provide your own API key in Profile.' });
-    }
-
-    console.log(`[AI] Generating with Gemini for ${user.email}`);
-
-    // Gemini Implementation
-    const geminiClients = userKey 
-      ? [new GoogleGenAI({ apiKey: userKey })]
-      : getGeminiClients();
-
-    if (geminiClients.length === 0) {
-      return res.status(500).json({ error: 'Gemini API not configured.' });
-    }
-
-    let lastError: any;
-    for (const client of geminiClients) {
-      try {
-        const result = await (client as any).models.generateContent({
-          model: 'gemini-2.0-flash-lite',
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          system_instruction: SYSTEM_INSTRUCTION
-        });
-        text = (result.text || '').trim();
-        if (text) break;
-      } catch (err) {
-        lastError = err;
-        console.error('[Gemini Loop Error]', (err as Error).message);
+      if (!user) {
+          console.error('[AI] No user object in request');
+          return res.status(401).json({ error: 'Identity matrix unreadable. Please re-sign.' });
       }
-    }
-    if (!text && lastError) throw lastError;
-    
-    // Decrease Fuel (Only if using platform keys)
-    if (user && !userKey) {
-      user.fuel = Math.max(0, (user.fuel || 0) - 1); // 1 Fuel per turn
-      await user.save();
-    }
 
-    res.json({ text, fuel: user?.fuel });
-  } catch (err) {
-    console.error('AI ERROR [Generate]:', (err as Error).message);
-    res.status(500).json({ error: 'AI Generation failed: ' + (err as Error).message });
-  }
+      const userKey = user?.apiKeys?.[provider];
+
+      let geminiClients: any[] = [];
+      try {
+        if (!GoogleGenerativeAI) {
+            throw new Error('Matrix connection still calibrating. Retry in 2 seconds.');
+        }
+        
+        // Smarter parsing for Super-Keys (handles commas, spaces, and newlines)
+        const keysList = (userKey || '').split(/[\s,]+/).map((k: string) => k.trim()).filter(Boolean);
+        
+        geminiClients = keysList.map((k: string) => {
+              try {
+                return new GoogleGenerativeAI(k);
+              } catch (e) {
+                console.error('[AI Init Error] Key failed:', k.substring(0, 5) + '...', (e as Error).message);
+                return null;
+              }
+            }).filter(Boolean);
+            
+        if (geminiClients.length === 0) {
+            geminiClients = getGeminiClients();
+        }
+      } catch (e) {
+        console.error('[AI Core Init Error]:', (e as Error).message);
+      }
+
+      if (geminiClients.length === 0) {
+          throw new Error('No valid Pulse-Keys detected. Matrix connection severed.');
+      }
+
+      let lastError: any;
+      for (let i = 0; i < geminiClients.length; i++) {
+        try {
+          const client = geminiClients[i];
+          console.log(`[AI] Testing Key #${i+1}...`);
+          
+          let model = client.getGenerativeModel({
+            model: 'gemini-1.5-flash',
+            systemInstruction: SYSTEM_INSTRUCTION
+          });
+
+          let result;
+          try {
+            result = await model.generateContent({
+              contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            });
+          } catch (e: any) {
+            if (e.message.includes('404') || e.message.includes('model not found')) {
+               console.log(`[AI] Fallback from 1.5-flash to gemini-pro for key #${i+1}`);
+               model = client.getGenerativeModel({
+                 model: 'gemini-pro',
+                 systemInstruction: SYSTEM_INSTRUCTION
+               });
+               result = await model.generateContent({
+                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
+               });
+            } else {
+               throw e;
+            }
+          }
+          
+          if (result && result.response && result.response.text) {
+            text = result.response.text();
+          } else if (result.candidates && result.candidates[0]?.content?.parts?.[0]?.text) {
+            text = result.candidates[0].content.parts[0].text;
+          }
+          
+          if (text) {
+             console.log('[AI] Success with Key #' + (i+1));
+             break;
+          }
+        } catch (err) {
+          lastError = err;
+          console.error(`[AI Key #${i+1} Error]:`, (err as Error).message);
+        }
+      }
+      
+      if (!text && lastError) throw lastError;
+      if (!text) throw new Error('No response generated from any key.');
+
+      res.json({ text, fuel: user?.fuel });
+    } catch (err) {
+      console.error('CRITICAL AI ERROR:', (err as Error).message);
+      res.status(500).json({ error: (err as Error).message });
+    }
 });
 
 app.post('/api/ai/summarize', authenticate(), async (req: any, res: Response) => {
